@@ -1,239 +1,468 @@
-import type { Movie, CinemaBranch, CinemaHall, Showtime, AppUser } from '@/types';
+import type { Movie, Branch, Showtime, Booking, User, Notification, NotificationTemplate } from '@/types';
 
-export const branches: CinemaBranch[] = [
-  { id: 'b1', name: 'CineBook Downtown', city: 'New York', address: '120 Broadway, New York, NY' },
-  { id: 'b2', name: 'CineBook Westside', city: 'Los Angeles', address: '450 Melrose Ave, Los Angeles, CA' },
-  { id: 'b3', name: 'CineBook Lakeshore', city: 'Chicago', address: '600 N Michigan Ave, Chicago, IL' },
-  { id: 'b4', name: 'CineBook Mission', city: 'San Francisco', address: '2299 Mission St, San Francisco, CA' },
-];
-
-export const halls: CinemaHall[] = [
-  { id: 'h1', branchId: 'b1', name: 'Hall A — IMAX', rows: 10, cols: 14, premiumRows: 3 },
-  { id: 'h2', branchId: 'b1', name: 'Hall B — Standard', rows: 8, cols: 12, premiumRows: 2 },
-  { id: 'h3', branchId: 'b2', name: 'Hall A — Dolby', rows: 10, cols: 14, premiumRows: 3 },
-  { id: 'h4', branchId: 'b2', name: 'Hall B — Standard', rows: 8, cols: 12, premiumRows: 2 },
-  { id: 'h5', branchId: 'b3', name: 'Hall A — IMAX', rows: 10, cols: 14, premiumRows: 3 },
-  { id: 'h6', branchId: 'b4', name: 'Hall A — Dolby', rows: 9, cols: 13, premiumRows: 2 },
-];
-
-export const users: AppUser[] = [
-  { id: 'u1', name: 'Alex Carter', email: 'alex@example.com', role: 'customer', status: 'active', joinedAt: '2025-03-12' },
-  { id: 'u2', name: 'Jordan Lee', email: 'jordan@example.com', role: 'customer', status: 'active', joinedAt: '2025-04-02' },
-  { id: 'u3', name: 'Sam Rivera', email: 'sam@example.com', role: 'customer', status: 'active', joinedAt: '2025-05-18' },
-  { id: 'u4', name: 'Taylor Quinn', email: 'taylor@example.com', role: 'customer', status: 'suspended', joinedAt: '2025-01-22' },
-  { id: 'u5', name: 'Manager Blake', email: 'blake@example.com', role: 'manager', branchId: 'b1', status: 'active', joinedAt: '2024-11-05' },
-  { id: 'u6', name: 'Admin Casey', email: 'casey@example.com', role: 'admin', status: 'active', joinedAt: '2024-08-15' },
-];
-
-const POSTER = (id: string) =>
-  `https://images.pexels.com/photos/${id}/pexels-photo-${id}.jpeg?auto=compress&cs=tinysrgb&w=600&h=900&fit=crop`;
-const BACKDROP = (id: string) =>
-  `https://images.pexels.com/photos/${id}/pexels-photo-${id}.jpeg?auto=compress&cs=tinysrgb&w=1600&h=800&fit=crop`;
-
-export const movies: Movie[] = [
+export const mockMovies: Movie[] = [
   {
     id: 'm1',
-    title: 'Stellar Horizon',
-    synopsis:
-      'When a deep-space crew discovers a derelict station at the edge of the galaxy, they must unravel a mystery that could rewrite the fate of humanity.',
-    cast: ['Ava Sinclair', 'Marcus Cole', 'Lena Voss', 'Theo Park'],
-    director: 'D. R. Maren',
-    genres: ['Sci-Fi', 'Thriller'],
+    title: 'Dune: Part Two',
+    synopsis: 'Paul Atreides unites with the Fremen while seeking revenge against the conspirators who destroyed his family. Balancing love against the fate of the known universe, he must prevent a terrible future only he can foresee.',
+    poster: 'https://image.tmdb.org/t/p/w500/1pdfLvkbL972k74zp9rnm7Oipsn.jpg',
+    backdrop: 'https://image.tmdb.org/t/p/original/8b8R8l88Qje9dn9OE8PY05Nxl1X.jpg',
+    genre: ['Sci-Fi', 'Adventure', 'Drama'],
     language: 'English',
+    duration: 166,
     rating: 8.7,
-    durationMin: 142,
-    releaseDate: '2026-07-03',
-    posterUrl: POSTER('72310'),
-    backdropUrl: BACKDROP('72310'),
-    trailerUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-    status: 'now_showing',
+    certification: 'PG-13',
+    director: 'Denis Villeneuve',
+    cast: ['Timothée Chalamet', 'Zendaya', 'Rebecca Ferguson', 'Javier Bardem', 'Austin Butler'],
+    releaseDate: '2024-03-01',
+    status: 'now-showing',
     featured: true,
+    trailerUrl: '#',
   },
   {
     id: 'm2',
-    title: 'Midnight in Marrakech',
-    synopsis:
-      'A retired thief is pulled back into the underworld for one last job through the winding alleys and vibrant souks of Marrakech.',
-    cast: ['Yasmin Hale', 'Omar Faruk', 'Clara Mendez'],
-    director: 'P. Castellano',
-    genres: ['Action', 'Crime'],
+    title: 'Oppenheimer',
+    synopsis: 'The story of American scientist J. Robert Oppenheimer and his role in the development of the atomic bomb during World War II.',
+    poster: 'https://image.tmdb.org/t/p/w500/8Gxv8gSFCU0XGDykQ5L8kR6qVr3.jpg',
+    backdrop: 'https://image.tmdb.org/t/p/original/rLb2cwH3nZJ2xgKqGw5Ov9mF5m5.jpg',
+    genre: ['Drama', 'History', 'Thriller'],
     language: 'English',
-    rating: 8.1,
-    durationMin: 118,
-    releaseDate: '2026-07-19',
-    posterUrl: POSTER('33134'),
-    backdropUrl: BACKDROP('33134'),
-    trailerUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-    status: 'now_showing',
+    duration: 180,
+    rating: 8.4,
+    certification: 'R',
+    director: 'Christopher Nolan',
+    cast: ['Cillian Murphy', 'Emily Blunt', 'Matt Damon', 'Robert Downey Jr.', 'Florence Pugh'],
+    releaseDate: '2024-02-15',
+    status: 'now-showing',
     featured: true,
+    trailerUrl: '#',
   },
   {
     id: 'm3',
-    title: 'The Last Lighthouse',
-    synopsis:
-      'A lighthouse keeper on a remote island confronts a haunting presence that arrives with every storm, blurring the line between memory and reality.',
-    cast: ['Eleanor Frost', 'Henry Vale'],
-    director: 'G. Whitmore',
-    genres: ['Drama', 'Mystery'],
+    title: 'Poor Things',
+    synopsis: 'The incredible tale about the fantastical evolution of Bella Baxter, a young woman brought back to life by the brilliant and unorthodox scientist Dr. Godwin Baxter.',
+    poster: 'https://image.tmdb.org/t/p/w500/kCGlIMxk5tnXuIMiqU8Lfxd3AF2.jpg',
+    backdrop: 'https://image.tmdb.org/t/p/original/dWQ6UjBuHtcTTZmQ3BzbiqQfdSK.jpg',
+    genre: ['Comedy', 'Drama', 'Romance'],
     language: 'English',
+    duration: 141,
     rating: 7.9,
-    durationMin: 104,
-    releaseDate: '2026-06-21',
-    posterUrl: POSTER('269320'),
-    backdropUrl: BACKDROP('269320'),
-    trailerUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-    status: 'now_showing',
+    certification: 'R',
+    director: 'Yorgos Lanthimos',
+    cast: ['Emma Stone', 'Mark Ruffalo', 'Willem Dafoe', 'Ramy Youssef'],
+    releaseDate: '2024-01-12',
+    status: 'now-showing',
     featured: false,
+    trailerUrl: '#',
   },
   {
     id: 'm4',
-    title: 'Neon Pulse',
-    synopsis:
-      'In a neon-drenched megacity, a street musician discovers a sound that can alter reality — and a corporation that will kill to control it.',
-    cast: ['Kai Tanaka', 'Ria Solis', 'Dex Romero'],
-    director: 'M. Ito',
-    genres: ['Sci-Fi', 'Action'],
+    title: 'The Holdovers',
+    synopsis: 'A curmudgeonly instructor at a prep school remains on campus over the holidays with a troubled student and the school\'s head cook, forming an unlikely bond.',
+    poster: 'https://image.tmdb.org/t/p/w500/VkOIHCd1x16dfJOZc2KU3RXKfc.jpg',
+    backdrop: 'https://image.tmdb.org/t/p/original/9cBftliS61B2AXmxygOZx6t3EQ4.jpg',
+    genre: ['Comedy', 'Drama'],
     language: 'English',
-    rating: 8.4,
-    durationMin: 127,
-    releaseDate: '2026-07-28',
-    posterUrl: POSTER('305236'),
-    backdropUrl: BACKDROP('305236'),
-    trailerUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-    status: 'now_showing',
-    featured: true,
+    duration: 133,
+    rating: 7.8,
+    certification: 'R',
+    director: 'Alexander Payne',
+    cast: ['Paul Giamatti', 'Da\'Vine Joy Randolph', 'Dominic Sessa'],
+    releaseDate: '2024-02-20',
+    status: 'now-showing',
+    featured: false,
+    trailerUrl: '#',
   },
   {
     id: 'm5',
-    title: 'Paper Cranes',
-    synopsis:
-      'Two strangers meet in a Tokyo paper-folding class and spend a year folding a thousand cranes, each one carrying a wish they cannot say aloud.',
-    cast: ['Mei Aoki', 'Ren Sato'],
-    director: 'H. Nakamura',
-    genres: ['Romance', 'Drama'],
-    language: 'Japanese',
-    rating: 8.0,
-    durationMin: 96,
-    releaseDate: '2026-08-02',
-    posterUrl: POSTER('3617500'),
-    backdropUrl: BACKDROP('3617500'),
-    trailerUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-    status: 'now_showing',
+    title: 'Killers of the Flower Moon',
+    synopsis: 'When oil is discovered in 1920s Oklahoma under Osage Nation land, the Osage people are murdered one by one—until the FBI steps in to unravel the mystery.',
+    poster: 'https://image.tmdb.org/t/p/w500/dVF2Y5f5jJyn9OWZk79Q4R5lTNg.jpg',
+    backdrop: 'https://image.tmdb.org/t/p/original/slEz1yi1o1rZc7N9Ry2jvEh3y0R.jpg',
+    genre: ['Crime', 'Drama', 'History'],
+    language: 'English',
+    duration: 206,
+    rating: 7.6,
+    certification: 'R',
+    director: 'Martin Scorsese',
+    cast: ['Leonardo DiCaprio', 'Robert De Niro', 'Lily Gladstone'],
+    releaseDate: '2024-02-08',
+    status: 'now-showing',
     featured: false,
+    trailerUrl: '#',
   },
   {
     id: 'm6',
-    title: 'Glacier',
-    synopsis:
-      'A glaciologist races against a collapsing ice shelf to recover data that could save millions — and confronts a truth buried in the ice.',
-    cast: ['Nora Berg', 'Ivan Petrov'],
-    director: 'S. Halvorsen',
-    genres: ['Adventure', 'Thriller'],
+    title: 'Furiosa: A Mad Max Saga',
+    synopsis: 'The origin story of renegade warrior Furiosa, who is kidnapped by the great biker horde led by warlord Dementus and must survive many trials as she finds her way home.',
+    poster: 'https://image.tmdb.org/t/p/w500/iVIDYnJhjOIUIFpfcRyJqGnQRHM.jpg',
+    backdrop: 'https://image.tmdb.org/t/p/original/dlMXJzaxXQYKy5qOfQ5k5f93uF8.jpg',
+    genre: ['Action', 'Adventure', 'Sci-Fi'],
     language: 'English',
-    rating: 7.6,
-    durationMin: 112,
-    releaseDate: '2026-06-14',
-    posterUrl: POSTER('2387873'),
-    backdropUrl: BACKDROP('2387873'),
-    trailerUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-    status: 'now_showing',
-    featured: false,
+    duration: 148,
+    rating: 7.5,
+    certification: 'R',
+    director: 'George Miller',
+    cast: ['Anya Taylor-Joy', 'Chris Hemsworth', 'Tom Burke'],
+    releaseDate: '2024-05-15',
+    status: 'coming-soon',
+    featured: true,
+    trailerUrl: '#',
   },
   {
     id: 'm7',
-    title: 'The Cartographer',
-    synopsis:
-      'A reclusive mapmaker is hired to chart a forest that appears on no map, and discovers it changes shape to match whoever walks it.',
-    cast: ['Owen Drake', 'Priya Nair'],
-    director: 'L. Fontaine',
-    genres: ['Fantasy', 'Adventure'],
+    title: 'Civil War',
+    synopsis: 'A team of journalists travel across a fractured America in the midst of a civil war that has engulfed the entire country.',
+    poster: 'https://image.tmdb.org/t/p/w500/f7UUHZMUM3jIoiV2q2xOf4RQfS.jpg',
+    backdrop: 'https://image.tmdb.org/t/p/original/5eQSWBT2jBJTt4Q6Rf7R1sX4R8t.jpg',
+    genre: ['Action', 'Drama', 'Thriller'],
     language: 'English',
-    rating: 8.2,
-    durationMin: 134,
-    releaseDate: '2026-09-12',
-    posterUrl: POSTER('2387873'),
-    backdropUrl: BACKDROP('2387873'),
-    trailerUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-    status: 'coming_soon',
+    duration: 109,
+    rating: 7.2,
+    certification: 'R',
+    director: 'Alex Garland',
+    cast: ['Kirsten Dunst', 'Wagner Moura', 'Cailee Spaeny'],
+    releaseDate: '2024-04-12',
+    status: 'coming-soon',
     featured: false,
+    trailerUrl: '#',
   },
   {
     id: 'm8',
-    title: 'Echoes of Tomorrow',
-    synopsis:
-      'A physicist receives messages from her future self and must decide which warnings to heed and which futures to let unfold.',
-    cast: ['Dr. Mira Shah', 'Eli Cross'],
-    director: 'A. Okonkwo',
-    genres: ['Sci-Fi', 'Drama'],
+    title: 'Challengers',
+    synopsis: 'Tashi, a former tennis prodigy turned coach, has taken her husband and transformed him from a mediocre player into a Grand Slam champion. To overcome a losing streak, he needs to face his former best friend and Tashi\'s ex-boyfriend.',
+    poster: 'https://image.tmdb.org/t/p/w500/HwjGBDxIe7cKnxvk6CDPevAUvm7.jpg',
+    backdrop: 'https://image.tmdb.org/t/p/original/9PSu4tUyfSD4grSc4xqhgS1Bk5o.jpg',
+    genre: ['Drama', 'Romance', 'Sport'],
     language: 'English',
-    rating: 8.5,
-    durationMin: 129,
-    releaseDate: '2026-09-25',
-    posterUrl: POSTER('2150'),
-    backdropUrl: BACKDROP('2150'),
-    trailerUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-    status: 'coming_soon',
+    duration: 131,
+    rating: 7.1,
+    certification: 'R',
+    director: 'Luca Guadagnino',
+    cast: ['Zendaya', 'Mike Faist', 'Josh O\'Connor'],
+    releaseDate: '2024-04-26',
+    status: 'coming-soon',
     featured: false,
-  },
-  {
-    id: 'm9',
-    title: 'Wildfire Season',
-    synopsis:
-      'A smokejumper returns to her hometown as a record fire season threatens everything she left behind.',
-    cast: ['Dana Cole', 'Marcus Reyes'],
-    director: 'T. Brooks',
-    genres: ['Drama', 'Action'],
-    language: 'English',
-    rating: 7.8,
-    durationMin: 108,
-    releaseDate: '2026-10-03',
-    posterUrl: POSTER('269320'),
-    backdropUrl: BACKDROP('269320'),
-    trailerUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-    status: 'coming_soon',
-    featured: false,
+    trailerUrl: '#',
   },
 ];
 
-const today = new Date();
-const dateStr = (offset: number) => {
-  const d = new Date(today);
-  d.setDate(d.getDate() + offset);
-  return d.toISOString().split('T')[0];
-};
-
-export const showtimes: Showtime[] = [
-  { id: 's1', movieId: 'm1', branchId: 'b1', hallId: 'h1', date: dateStr(0), time: '14:00', price: 14.5, premiumPrice: 19.5, bookedSeats: ['A1', 'A2', 'F5', 'F6', 'G7'] },
-  { id: 's2', movieId: 'm1', branchId: 'b1', hallId: 'h1', date: dateStr(0), time: '18:30', price: 16.5, premiumPrice: 22.0, bookedSeats: ['B3', 'C4', 'D5'] },
-  { id: 's3', movieId: 'm1', branchId: 'b2', hallId: 'h3', date: dateStr(0), time: '16:00', price: 15.0, premiumPrice: 20.0, bookedSeats: ['A1', 'A2', 'A3'] },
-  { id: 's4', movieId: 'm2', branchId: 'b1', hallId: 'h2', date: dateStr(0), time: '15:15', price: 12.0, premiumPrice: 16.0, bookedSeats: ['E5', 'E6'] },
-  { id: 's5', movieId: 'm2', branchId: 'b3', hallId: 'h5', date: dateStr(0), time: '19:00', price: 13.5, premiumPrice: 18.0, bookedSeats: [] },
-  { id: 's6', movieId: 'm3', branchId: 'b1', hallId: 'h2', date: dateStr(0), time: '13:00', price: 11.0, premiumPrice: 15.0, bookedSeats: ['C1', 'C2', 'C3', 'C4'] },
-  { id: 's7', movieId: 'm4', branchId: 'b2', hallId: 'h3', date: dateStr(0), time: '17:45', price: 14.0, premiumPrice: 19.0, bookedSeats: ['A1', 'B1', 'C1'] },
-  { id: 's8', movieId: 'm4', branchId: 'b4', hallId: 'h6', date: dateStr(0), time: '20:00', price: 14.0, premiumPrice: 19.0, bookedSeats: ['D4', 'D5', 'D6'] },
-  { id: 's9', movieId: 'm5', branchId: 'b1', hallId: 'h2', date: dateStr(1), time: '14:30', price: 10.5, premiumPrice: 14.5, bookedSeats: [] },
-  { id: 's10', movieId: 'm6', branchId: 'b3', hallId: 'h5', date: dateStr(1), time: '16:30', price: 12.5, premiumPrice: 17.0, bookedSeats: ['A1', 'A2'] },
-  { id: 's11', movieId: 'm1', branchId: 'b1', hallId: 'h1', date: dateStr(1), time: '19:00', price: 16.5, premiumPrice: 22.0, bookedSeats: ['F1', 'F2', 'F3', 'G4'] },
-  { id: 's12', movieId: 'm2', branchId: 'b2', hallId: 'h4', date: dateStr(2), time: '15:00', price: 12.0, premiumPrice: 16.0, bookedSeats: [] },
+export const mockBranches: Branch[] = [
+  {
+    id: 'b1',
+    name: 'CineBook Downtown',
+    city: 'New York',
+    address: '123 Broadway, New York, NY 10001',
+    halls: [
+      { id: 'h1', name: 'Hall A — IMAX', rows: 10, seatsPerRow: 16, premiumRows: 2 },
+      { id: 'h2', name: 'Hall B — Standard', rows: 8, seatsPerRow: 12, premiumRows: 2 },
+      { id: 'h3', name: 'Hall C — Recliner', rows: 6, seatsPerRow: 10, premiumRows: 3 },
+    ],
+  },
+  {
+    id: 'b2',
+    name: 'CineBook Westside',
+    city: 'Los Angeles',
+    address: '456 Sunset Blvd, Los Angeles, CA 90028',
+    halls: [
+      { id: 'h4', name: 'Hall A — Dolby Atmos', rows: 10, seatsPerRow: 14, premiumRows: 2 },
+      { id: 'h5', name: 'Hall B — Standard', rows: 8, seatsPerRow: 12, premiumRows: 2 },
+    ],
+  },
+  {
+    id: 'b3',
+    name: 'CineBook Lakeside',
+    city: 'Chicago',
+    address: '789 Navy Pier, Chicago, IL 60611',
+    halls: [
+      { id: 'h6', name: 'Hall A — IMAX', rows: 10, seatsPerRow: 16, premiumRows: 2 },
+      { id: 'h7', name: 'Hall B — Standard', rows: 8, seatsPerRow: 12, premiumRows: 2 },
+      { id: 'h8', name: 'Hall C — VIP', rows: 6, seatsPerRow: 8, premiumRows: 3 },
+    ],
+  },
 ];
 
-export const seedBookings = [
+function generateShowtimes(): Showtime[] {
+  const showtimes: Showtime[] = [];
+  const nowShowing = mockMovies.filter(m => m.status === 'now-showing');
+  const times = ['10:00 AM', '1:15 PM', '4:30 PM', '7:00 PM', '10:15 PM'];
+  const dates: string[] = [];
+  const today = new Date();
+
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() + i);
+    dates.push(d.toISOString().split('T')[0]);
+  }
+
+  let id = 1;
+  nowShowing.forEach(movie => {
+    mockBranches.forEach(branch => {
+      branch.halls.forEach(hall => {
+        const date = dates[Math.floor(Math.random() * dates.length)];
+        const time = times[Math.floor(Math.random() * times.length)];
+        const bookedSeats: string[] = [];
+        const totalSeats = hall.rows * hall.seatsPerRow;
+        const bookedCount = Math.floor(Math.random() * totalSeats * 0.4);
+        for (let i = 0; i < bookedCount; i++) {
+          const row = String.fromCharCode(65 + Math.floor(Math.random() * hall.rows));
+          const seat = Math.floor(Math.random() * hall.seatsPerRow) + 1;
+          const seatId = `${row}${seat}`;
+          if (!bookedSeats.includes(seatId)) bookedSeats.push(seatId);
+        }
+        showtimes.push({
+          id: `s${id++}`,
+          movieId: movie.id,
+          branchId: branch.id,
+          hallId: hall.id,
+          date,
+          time,
+          basePrice: 14.99,
+          premiumPrice: 22.99,
+          bookedSeats,
+        });
+      });
+    });
+  });
+
+  return showtimes;
+}
+
+export const mockShowtimes: Showtime[] = generateShowtimes();
+
+export const mockBookings: Booking[] = [
   {
-    id: 'bk-seed-1',
-    userId: 'demo',
-    movieId: 'm3',
-    showtimeId: 's6',
+    id: 'bk1',
+    userId: 'u1',
+    movieId: 'm1',
+    movieTitle: 'Dune: Part Two',
+    moviePoster: 'https://image.tmdb.org/t/p/w500/1pdfLvkbL972k74zp9rnm7Oipsn.jpg',
     branchId: 'b1',
-    hallId: 'h2',
-    seats: ['D6', 'D7'],
-    date: dateStr(-3),
-    time: '13:00',
-    subtotal: 22.0,
-    fees: 3.0,
-    total: 25.0,
-    status: 'confirmed' as const,
-    refundStatus: 'none' as const,
-    bookedAt: new Date(Date.now() - 5 * 86400000).toISOString(),
-    paymentMethod: 'Visa •••• 4242',
+    branchName: 'CineBook Downtown',
+    hallName: 'Hall A — IMAX',
+    showtimeId: 's1',
+    date: new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0],
+    time: '7:00 PM',
+    seats: ['F5', 'F6'],
+    totalAmount: 29.98,
+    status: 'confirmed',
+    refundStatus: 'none',
+    bookingDate: new Date().toISOString().split('T')[0],
+  },
+  {
+    id: 'bk2',
+    userId: 'u1',
+    movieId: 'm2',
+    movieTitle: 'Oppenheimer',
+    moviePoster: 'https://image.tmdb.org/t/p/w500/8Gxv8gSFCU0XGDykQ5L8kR6qVr3.jpg',
+    branchId: 'b1',
+    branchName: 'CineBook Downtown',
+    hallName: 'Hall B — Standard',
+    showtimeId: 's5',
+    date: '2024-02-10',
+    time: '4:30 PM',
+    seats: ['C3', 'C4', 'C5'],
+    totalAmount: 44.97,
+    status: 'cancelled',
+    refundStatus: 'processed',
+    bookingDate: '2024-01-20',
+  },
+];
+
+export const mockUsers: User[] = [
+  { id: 'u1', name: 'Alex Carter', email: 'alex@cinebook.com', role: 'customer', avatarColor: '#F5C518' },
+  { id: 'u2', name: 'Jordan Lee', email: 'jordan@cinebook.com', role: 'cinemaManager', avatarColor: '#E50914' },
+  { id: 'u3', name: 'Sam Rivera', email: 'sam@cinebook.com', role: 'admin', avatarColor: '#3B82F6' },
+];
+
+export const mockAdminUsers: User[] = [
+  { id: 'u1', name: 'Alex Carter', email: 'alex@cinebook.com', role: 'customer', avatarColor: '#F5C518' },
+  { id: 'u2', name: 'Jordan Lee', email: 'jordan@cinebook.com', role: 'cinemaManager', avatarColor: '#E50914' },
+  { id: 'u3', name: 'Sam Rivera', email: 'sam@cinebook.com', role: 'admin', avatarColor: '#3B82F6' },
+  { id: 'u4', name: 'Taylor Swift', email: 'taylor@cinebook.com', role: 'customer', avatarColor: '#10B981' },
+  { id: 'u5', name: 'Morgan Freeman', email: 'morgan@cinebook.com', role: 'customer', avatarColor: '#F97316' },
+  { id: 'u6', name: 'Casey Nguyen', email: 'casey@cinebook.com', role: 'cinemaManager', avatarColor: '#8B5CF6' },
+  { id: 'u7', name: 'Riley Patel', email: 'riley@cinebook.com', role: 'customer', avatarColor: '#EC4899' },
+  { id: 'u8', name: 'Jamie Chen', email: 'jamie@cinebook.com', role: 'admin', avatarColor: '#06B6D4' },
+];
+
+export const mockNotifications: Notification[] = [
+  {
+    id: 'n1',
+    type: 'booking_confirmation',
+    title: 'Booking Confirmed',
+    message: 'Your booking for Dune: Part Two at CineBook Downtown has been confirmed. 2 seats: F5, F6.',
+    userId: 'u1',
+    read: false,
+    createdAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+    link: '/ticket/bk1',
+  },
+  {
+    id: 'n2',
+    type: 'showtime_reminder',
+    title: 'Showtime Tomorrow',
+    message: 'Reminder: Dune: Part Two is tomorrow at 7:00 PM at CineBook Downtown, Hall A — IMAX.',
+    userId: 'u1',
+    read: false,
+    createdAt: new Date(Date.now() - 5 * 3600000).toISOString(),
+    link: '/ticket/bk1',
+  },
+  {
+    id: 'n3',
+    type: 'cancellation_refund',
+    title: 'Refund Processed',
+    message: 'Your refund of $44.97 for Oppenheimer has been processed to your original payment method.',
+    userId: 'u1',
+    read: true,
+    createdAt: new Date(Date.now() - 3 * 86400000).toISOString(),
+  },
+  {
+    id: 'n4',
+    type: 'system_announcement',
+    title: 'Welcome to CineBook',
+    message: 'Thank you for joining CineBook! Enjoy premium cinema booking with IMAX, Dolby Atmos, and VIP recliner halls.',
+    userId: 'u1',
+    read: true,
+    createdAt: new Date(Date.now() - 7 * 86400000).toISOString(),
+    audience: 'all',
+    createdBy: 'u3',
+    status: 'read',
+  },
+  {
+    id: 'n5',
+    type: 'new_booking',
+    title: 'New Booking Alert',
+    message: 'New booking for Dune: Part Two at CineBook Downtown, Hall A — IMAX. 2 seats booked.',
+    userId: 'u2',
+    read: false,
+    createdAt: new Date(Date.now() - 1 * 3600000).toISOString(),
+  },
+  {
+    id: 'n6',
+    type: 'low_availability',
+    title: 'Low Seat Availability',
+    message: 'Hall A — IMAX, 7:00 PM show is 90% booked. Only 6 seats remaining.',
+    userId: 'u2',
+    read: false,
+    createdAt: new Date(Date.now() - 4 * 3600000).toISOString(),
+  },
+  {
+    id: 'n7',
+    type: 'cancellation_refund',
+    title: 'Booking Cancelled',
+    message: 'A booking for Oppenheimer at CineBook Downtown has been cancelled. Refund pending.',
+    userId: 'u2',
+    read: true,
+    createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+  },
+  {
+    id: 'n8',
+    type: 'system_announcement',
+    title: 'Platform Maintenance',
+    message: 'Scheduled maintenance on Sept 15, 2:00 AM - 4:00 AM EST. Booking will be temporarily unavailable.',
+    userId: 'u2',
+    read: true,
+    createdAt: new Date(Date.now() - 5 * 86400000).toISOString(),
+    audience: 'all',
+    createdBy: 'u3',
+    status: 'read',
+  },
+  {
+    id: 'n9',
+    type: 'revenue_milestone',
+    title: 'Revenue Milestone Reached',
+    message: 'CineBook Downtown has crossed $50,000 in monthly revenue. Great work!',
+    userId: 'u3',
+    read: false,
+    createdAt: new Date(Date.now() - 3 * 3600000).toISOString(),
+  },
+  {
+    id: 'n10',
+    type: 'user_registration',
+    title: 'New User Registration',
+    message: 'Riley Patel (riley@cinebook.com) has registered as a Customer.',
+    userId: 'u3',
+    read: false,
+    createdAt: new Date(Date.now() - 6 * 3600000).toISOString(),
+  },
+  {
+    id: 'n11',
+    type: 'system_announcement',
+    title: 'High Traffic Alert',
+    message: 'Platform experiencing higher than usual traffic. All systems operational.',
+    userId: 'u3',
+    read: true,
+    createdAt: new Date(Date.now() - 1 * 86400000).toISOString(),
+    audience: 'all',
+    createdBy: 'u3',
+    status: 'read',
+  },
+  {
+    id: 'n12',
+    type: 'price_alert',
+    title: 'Price Drop Alert',
+    message: 'Tickets for Poor Things at CineBook Lakeside are now $9.99. Limited time offer!',
+    userId: 'u1',
+    read: false,
+    createdAt: new Date(Date.now() - 8 * 3600000).toISOString(),
+    link: '/movies/m3',
+  },
+  {
+    id: 'n13',
+    type: 'low_availability',
+    title: 'Low Seat Availability',
+    message: 'Hall A — IMAX, 10:00 AM show is 85% booked. Only 8 seats remaining.',
+    userId: 'u3',
+    read: true,
+    createdAt: new Date(Date.now() - 10 * 3600000).toISOString(),
+  },
+  {
+    id: 'n14',
+    type: 'scheduling_conflict',
+    title: 'Scheduling Conflict Warning',
+    message: 'Two showtimes overlap in Hall B — Standard at CineBook Westside. Please review.',
+    userId: 'u2',
+    read: true,
+    createdAt: new Date(Date.now() - 12 * 3600000).toISOString(),
+    link: '/manage/showtimes',
+  },
+];
+
+export const mockNotificationTemplates: NotificationTemplate[] = [
+  {
+    id: 'tpl1',
+    type: 'booking_confirmation',
+    title: 'Booking Confirmed',
+    message: 'Your booking for {{movie}} at {{branch}} has been confirmed. {{seats}} seats: {{seatList}}.',
+  },
+  {
+    id: 'tpl2',
+    type: 'cancellation_refund',
+    title: 'Booking Cancelled',
+    message: 'Your booking for {{movie}} has been cancelled. A refund of {{amount}} will be processed.',
+  },
+  {
+    id: 'tpl3',
+    type: 'showtime_reminder',
+    title: 'Showtime Reminder',
+    message: 'Reminder: {{movie}} is {{timeHint}} at {{branch}}, {{hall}}.',
+  },
+  {
+    id: 'tpl4',
+    type: 'price_alert',
+    title: 'Price Drop Alert',
+    message: 'Tickets for {{movie}} at {{branch}} are now {{price}}. Limited time offer!',
+  },
+  {
+    id: 'tpl5',
+    type: 'system_announcement',
+    title: 'System Announcement',
+    message: '{{message}}',
+  },
+  {
+    id: 'tpl6',
+    type: 'low_availability',
+    title: 'Low Seat Availability',
+    message: '{{hall}}, {{time}} show is {{percent}}% booked. Only {{remaining}} seats remaining.',
   },
 ];

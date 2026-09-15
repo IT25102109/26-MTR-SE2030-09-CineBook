@@ -38,12 +38,20 @@ public class MovieService {
     public Movie updateMovie(Long id, Movie updatedMovie) {
         Movie existing = getMovieById(id);
         existing.setTitle(updatedMovie.getTitle());
-        existing.setGenre(updatedMovie.getGenre());
-        existing.setDurationMinutes(updatedMovie.getDurationMinutes());
         existing.setSynopsis(updatedMovie.getSynopsis());
-        existing.setPosterUrl(updatedMovie.getPosterUrl());
+        existing.setCast(updatedMovie.getCast());
+        existing.setDirector(updatedMovie.getDirector());
+        existing.setGenres(updatedMovie.getGenres());
         existing.setLanguage(updatedMovie.getLanguage());
         existing.setRating(updatedMovie.getRating());
+        existing.setDurationMin(updatedMovie.getDurationMin() > 0 ? updatedMovie.getDurationMin() : updatedMovie.getDuration());
+        existing.setCertification(updatedMovie.getCertification());
+        existing.setReleaseDate(updatedMovie.getReleaseDate());
+        existing.setPosterUrl(updatedMovie.getPosterUrl() != null ? updatedMovie.getPosterUrl() : updatedMovie.getPoster());
+        existing.setBackdropUrl(updatedMovie.getBackdropUrl() != null ? updatedMovie.getBackdropUrl() : updatedMovie.getBackdrop());
+        existing.setTrailerUrl(updatedMovie.getTrailerUrl());
+        existing.setStatus(updatedMovie.getStatus());
+        existing.setFeatured(updatedMovie.isFeatured());
         return movieRepository.save(existing);
     }
 

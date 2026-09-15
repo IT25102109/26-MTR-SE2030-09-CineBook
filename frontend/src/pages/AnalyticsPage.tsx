@@ -1,209 +1,198 @@
-import { useState, useEffect, useMemo } from 'react';
-import {
-  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-} from 'recharts';
-import { DollarSign, Ticket, Users, TrendingUp, Film, Building2 } from 'lucide-react';
-import { store } from '@/data/store';
-import type { Booking, Movie, CinemaBranch, AppUser } from '@/types';
+import { useMemo } from 'react';
+import { TrendingUp, DollarSign, Users, Ticket, BarChart3, PieChart, Building2 } from 'lucide-react';
+import { BarChart, Bar, LineChart, Line, PieChart as RechartsPie, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { getBookings, getMovies, getBranches, getUsers, getShowtimes } from '@/data/store';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 
-const COLORS = ['#E50914', '#F5C518', '#22c55e', '#3b82f6', '#a855f7', '#f97316', '#ec4899'];
+const COLORS = ['#F5C518', '#E50914', '#3B82F6', '#10B981', '#8B5CF6', '#F97316', '#EC4899', '#06B6D4'];
 
 export function AnalyticsPage() {
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [branches, setBranches] = useState<CinemaBranch[]>([]);
-  const [users, setUsers] = useState<AppUser[]>([]);
+  const bookings = useMemo(() => getBookings(), []);
+  const movies = useMemo(() => getMovies(), []);
+  const branches = useMemo(() => getBranches(), []);
+  const users = useMemo(() => getUsers(), []);
+  const showtimes = useMemo(() => getShowtimes(), []);
 
-  useEffect(() => {
-    setBookings(store.getBookings());
-    setMovies(store.getMovies());
-    setBranches(store.getBranches());
-    setUsers(store.getUsers());
+  const totalRevenue = bookings.filter(b => b.status === 'confirmed').reduce((sum, b) => sum + b.totalAmount, 0);
+  const activeUsers = users.length;
+  const totalTickets = bookings.filter(b => b.status === 'confirmed').reduce((sum, b) => sum + b.seats.length, 0);
+
+  // Revenue trend (mock last 6 months)
+  const revenueData = useMemo(() => {
+    const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
+    return months.map((month, i) => ({
+      month,
+      revenue: Math.round(8000 + Math.random() * 12000 + i * 1500),
+      bookings: Math.round(200 + Math.random() * 300 + i * 50),
+    }));
   }, []);
-
-  const confirmed = useMemo(() => bookings.filter((b) => b.status === 'confirmed'), [bookings]);
-
-  const totalRevenue = useMemo(() => confirmed.reduce((sum, b) => sum + b.total, 0), [confirmed]);
-  const totalBookings = confirmed.length;
-  const totalSeats = useMemo(() => confirmed.reduce((sum, b) => sum + b.seats.length, 0), [confirmed]);
-  const activeUsers = users.filter((u) => u.status === 'active').length;
-
-  // Revenue by branch
-  const branchRevenue = useMemo(() => {
-    return branches.map((b) => {
-      const rev = confirmed.filter((bk) => bk.branchId === b.id).reduce((s, bk) => s + bk.total, 0);
-      const count = confirmed.filter((bk) => bk.branchId === b.id).length;
-      return { name: b.city, revenue: Math.round(rev), bookings: count };
-    });
-  }, [branches, confirmed]);
-
-  // Revenue trend (last 7 days mock)
-  const revenueTrend = useMemo(() => {
-    const days: { day: string; revenue: number }[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const label = d.toLocaleDateString('en-US', { weekday: 'short' });
-      const dayBookings = confirmed.filter((b) => new Date(b.bookedAt).toDateString() === d.toDateString());
-      const rev = dayBookings.reduce((s, b) => s + b.total, 0);
-      // Add some mock baseline so chart isn't empty
-      days.push({ day: label, revenue: Math.round(rev + 200 + Math.random() * 800) });
-    }
-    return days;
-  }, [confirmed]);
 
   // Top movies by bookings
   const topMovies = useMemo(() => {
     const counts: Record<string, number> = {};
-    confirmed.forEach((b) => { counts[b.movieId] = (counts[b.movieId] ?? 0) + b.seats.length; });
+    bookings.filter(b => b.status === 'confirmed').forEach(b => {
+      counts[b.movieTitle] = (counts[b.movieTitle] || 0) + b.seats.length;
+    });
     return Object.entries(counts)
-      .map(([id, count]) => ({ name: movies.find((m) => m.id === id)?.title ?? 'Unknown', seats: count }))
-      .sort((a, b) => b.seats - a.seats)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
       .slice(0, 5);
-  }, [confirmed, movies]);
+  }, [bookings]);
+
+  // Occupancy by branch
+  const branchOccupancy = useMemo(() => {
+    return branches.map(branch => {
+      const branchShowtimes = showtimes.filter(s => s.branchId === branch.id);
+      const totalCapacity = branchShowtimes.reduce((sum, s) => {
+        const hall = branch.halls.find(h => h.id === s.hallId);
+        return sum + (hall ? hall.rows * hall.seatsPerRow : 0);
+      }, 0);
+      const totalBooked = branchShowtimes.reduce((sum, s) => sum + s.bookedSeats.length, 0);
+      return {
+        name: branch.name.replace('CineBook ', ''),
+        occupancy: totalCapacity > 0 ? Math.round((totalBooked / totalCapacity) * 100) : 0,
+        revenue: Math.round(totalBooked * 18 + Math.random() * 5000),
+      };
+    });
+  }, [branches, showtimes]);
 
   // Genre distribution
   const genreData = useMemo(() => {
     const counts: Record<string, number> = {};
-    confirmed.forEach((b) => {
-      const m = movies.find((mv) => mv.id === b.movieId);
-      m?.genres.forEach((g) => { counts[g] = (counts[g] ?? 0) + 1; });
-    });
-    // Fallback mock data if no bookings
-    if (Object.keys(counts).length === 0) {
-      movies.forEach((m) => m.genres.forEach((g) => { counts[g] = (counts[g] ?? 0) + 1; }));
-    }
+    movies.forEach(m => m.genre.forEach(g => { counts[g] = (counts[g] || 0) + 1; }));
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
-  }, [confirmed, movies]);
-
-  const stats = [
-    { label: 'Total Revenue', value: `$${totalRevenue.toFixed(2)}`, icon: DollarSign, color: 'text-success', bg: 'bg-success/10' },
-    { label: 'Total Bookings', value: totalBookings, icon: Ticket, color: 'text-accent', bg: 'bg-accent/10' },
-    { label: 'Seats Sold', value: totalSeats, icon: TrendingUp, color: 'text-gold', bg: 'bg-gold/10' },
-    { label: 'Active Users', value: activeUsers, icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-    { label: 'Movies', value: movies.length, icon: Film, color: 'text-purple-400', bg: 'bg-purple-500/10' },
-    { label: 'Branches', value: branches.length, icon: Building2, color: 'text-orange-400', bg: 'bg-orange-500/10' },
-  ];
+  }, [movies]);
 
   return (
-    <div className="container-app py-8">
-      <h1 className="text-2xl font-bold mb-2">Analytics Dashboard</h1>
-      <p className="text-ink-400 mb-6">System-wide performance overview.</p>
-
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-        {stats.map((s, i) => {
-          const Icon = s.icon;
-          return (
-            <Card key={s.label} className="p-4 animate-fade-in" >
-              <div style={{ animationDelay: `${i * 50}ms` }}>
-                <div className={`w-10 h-10 rounded-xl ${s.bg} flex items-center justify-center mb-3`}>
-                  <Icon className={`w-5 h-5 ${s.color}`} />
-                </div>
-                <div className="text-2xl font-bold">{s.value}</div>
-                <div className="text-xs text-ink-400 mt-1">{s.label}</div>
-              </div>
-            </Card>
-          );
-        })}
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      <div className="mb-8">
+        <h1 className="text-3xl font-display font-bold mb-2">Analytics Dashboard</h1>
+        <p className="text-text-secondary">Platform-wide insights and performance metrics</p>
       </div>
 
-      {/* Charts */}
-      <div className="grid lg:grid-cols-2 gap-6 mb-6">
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {[
+          { label: 'Total Revenue', value: `$${totalRevenue.toLocaleString()}`, icon: DollarSign, color: '#F5C518', change: '+12.5%' },
+          { label: 'Tickets Sold', value: totalTickets.toString(), icon: Ticket, color: '#10B981', change: '+8.2%' },
+          { label: 'Active Users', value: activeUsers.toString(), icon: Users, color: '#3B82F6', change: '+5.1%' },
+          { label: 'Total Showtimes', value: showtimes.length.toString(), icon: Building2, color: '#E50914', change: '+3.7%' },
+        ].map((stat, i) => (
+          <Card key={i} className="p-5 animate-fade-in-up" >
+            <div className="flex items-center justify-between mb-3" style={{ animationDelay: `${i * 0.05}s`, opacity: 0 }}>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${stat.color}15` }}>
+                <stat.icon className="w-5 h-5" style={{ color: stat.color }} />
+              </div>
+              <Badge variant="green">{stat.change}</Badge>
+            </div>
+            <p className="text-2xl font-display font-bold">{stat.value}</p>
+            <p className="text-sm text-text-muted mt-1">{stat.label}</p>
+          </Card>
+        ))}
+      </div>
+
+      {/* Charts grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         {/* Revenue trend */}
-        <Card className="p-6">
-          <h3 className="font-semibold mb-4">Revenue Trend (7 days)</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={revenueTrend}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#26262d" />
-              <XAxis dataKey="day" stroke="#71717b" fontSize={12} />
-              <YAxis stroke="#71717b" fontSize={12} />
-              <Tooltip contentStyle={{ background: '#18181d', border: '1px solid #2e2e36', borderRadius: 12, color: '#fff' }} />
-              <Line type="monotone" dataKey="revenue" stroke="#E50914" strokeWidth={2} dot={{ fill: '#E50914', r: 4 }} />
+        <Card className="p-6 lg:col-span-2">
+          <div className="flex items-center gap-2 mb-5">
+            <TrendingUp className="w-5 h-5 text-accent-primary" />
+            <h3 className="font-display font-semibold">Revenue & Bookings Trend</h3>
+          </div>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={revenueData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1E1E24" />
+              <XAxis dataKey="month" stroke="#8A8A94" fontSize={12} />
+              <YAxis stroke="#8A8A94" fontSize={12} />
+              <Tooltip
+                contentStyle={{ backgroundColor: '#1C1C21', border: '1px solid #1E1E24', borderRadius: '12px', color: '#F2F2F0' }}
+                labelStyle={{ color: '#F2F2F0' }}
+              />
+              <Legend wrapperStyle={{ fontSize: '12px' }} />
+              <Line type="monotone" dataKey="revenue" stroke="#F5C518" strokeWidth={2} dot={{ fill: '#F5C518', r: 4 }} name="Revenue ($)" />
+              <Line type="monotone" dataKey="bookings" stroke="#3B82F6" strokeWidth={2} dot={{ fill: '#3B82F6', r: 4 }} name="Bookings" />
             </LineChart>
           </ResponsiveContainer>
         </Card>
 
-        {/* Branch comparison */}
+        {/* Genre distribution */}
         <Card className="p-6">
-          <h3 className="font-semibold mb-4">Revenue by Branch</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={branchRevenue}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#26262d" />
-              <XAxis dataKey="name" stroke="#71717b" fontSize={12} />
-              <YAxis stroke="#71717b" fontSize={12} />
-              <Tooltip contentStyle={{ background: '#18181d', border: '1px solid #2e2e36', borderRadius: 12, color: '#fff' }} />
-              <Bar dataKey="revenue" fill="#F5C518" radius={[8, 8, 0, 0]} />
+          <div className="flex items-center gap-2 mb-5">
+            <PieChart className="w-5 h-5 text-accent-primary" />
+            <h3 className="font-display font-semibold">Genre Distribution</h3>
+          </div>
+          <ResponsiveContainer width="100%" height={300}>
+            <RechartsPie data={genreData}>
+              <Pie
+                data={genreData}
+                cx="50%"
+                cy="50%"
+                outerRadius={90}
+                innerRadius={45}
+                dataKey="value"
+                paddingAngle={3}
+              >
+                {genreData.map((_, i) => (
+                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip
+                contentStyle={{ backgroundColor: '#1C1C21', border: '1px solid #1E1E24', borderRadius: '12px', color: '#F2F2F0' }}
+              />
+              <Legend wrapperStyle={{ fontSize: '11px' }} />
+            </RechartsPie>
+          </ResponsiveContainer>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Top movies */}
+        <Card className="p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <BarChart3 className="w-5 h-5 text-accent-primary" />
+            <h3 className="font-display font-semibold">Top Movies by Tickets Sold</h3>
+          </div>
+          {topMovies.length > 0 ? (
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={topMovies} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="#1E1E24" horizontal={false} />
+                <XAxis type="number" stroke="#8A8A94" fontSize={12} />
+                <YAxis type="category" dataKey="name" stroke="#8A8A94" fontSize={11} width={120} tickFormatter={(val: string) => val.length > 15 ? val.slice(0, 15) + '...' : val} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#1C1C21', border: '1px solid #1E1E24', borderRadius: '12px', color: '#F2F2F0' }}
+                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                />
+                <Bar dataKey="value" fill="#F5C518" radius={[0, 6, 6, 0]} name="Tickets" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[280px] flex items-center justify-center text-text-muted text-sm">No booking data yet</div>
+          )}
+        </Card>
+
+        {/* Branch occupancy */}
+        <Card className="p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <Building2 className="w-5 h-5 text-accent-primary" />
+            <h3 className="font-display font-semibold">Branch Occupancy & Revenue</h3>
+          </div>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={branchOccupancy}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1E1E24" />
+              <XAxis dataKey="name" stroke="#8A8A94" fontSize={12} />
+              <YAxis stroke="#8A8A94" fontSize={12} />
+              <Tooltip
+                contentStyle={{ backgroundColor: '#1C1C21', border: '1px solid #1E1E24', borderRadius: '12px', color: '#F2F2F0' }}
+                cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+              />
+              <Legend wrapperStyle={{ fontSize: '12px' }} />
+              <Bar dataKey="occupancy" fill="#3B82F6" radius={[6, 6, 0, 0]} name="Occupancy %" />
+              <Bar dataKey="revenue" fill="#10B981" radius={[6, 6, 0, 0]} name="Revenue ($)" />
             </BarChart>
           </ResponsiveContainer>
         </Card>
       </div>
-
-      <div className="grid lg:grid-cols-2 gap-6">
-        {/* Top movies */}
-        <Card className="p-6">
-          <h3 className="font-semibold mb-4">Top Movies by Seats Sold</h3>
-          {topMovies.length === 0 ? (
-            <p className="text-sm text-ink-400 py-10 text-center">No booking data yet.</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={topMovies} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#26262d" />
-                <XAxis type="number" stroke="#71717b" fontSize={12} />
-                <YAxis type="category" dataKey="name" stroke="#71717b" fontSize={11} width={100} />
-                <Tooltip contentStyle={{ background: '#18181d', border: '1px solid #2e2e36', borderRadius: 12, color: '#fff' }} />
-                <Bar dataKey="seats" fill="#E50914" radius={[0, 8, 8, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </Card>
-
-        {/* Genre distribution */}
-        <Card className="p-6">
-          <h3 className="font-semibold mb-4">Genre Distribution</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie data={genreData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} innerRadius={50} paddingAngle={3}>
-                {genreData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-              </Pie>
-              <Tooltip contentStyle={{ background: '#18181d', border: '1px solid #2e2e36', borderRadius: 12, color: '#fff' }} />
-              <Legend wrapperStyle={{ fontSize: 12, color: '#a1a1aa' }} />
-            </PieChart>
-          </ResponsiveContainer>
-        </Card>
-      </div>
-
-      {/* Branch comparison table */}
-      <Card className="p-6 mt-6">
-        <h3 className="font-semibold mb-4">Branch Performance Comparison</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-ink-400 text-xs uppercase tracking-wider">
-              <tr>
-                <th className="text-left px-4 py-2 font-medium">Branch</th>
-                <th className="text-left px-4 py-2 font-medium">City</th>
-                <th className="text-right px-4 py-2 font-medium">Bookings</th>
-                <th className="text-right px-4 py-2 font-medium">Revenue</th>
-                <th className="text-right px-4 py-2 font-medium">Avg / Booking</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {branchRevenue.map((b, i) => (
-                <tr key={i} className="hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-3 font-medium">{branches[i]?.name}</td>
-                  <td className="px-4 py-3 text-ink-300">{b.name}</td>
-                  <td className="px-4 py-3 text-right">{b.bookings}</td>
-                  <td className="px-4 py-3 text-right text-success font-semibold">${b.revenue}</td>
-                  <td className="px-4 py-3 text-right text-ink-300">{b.bookings > 0 ? `$${(b.revenue / b.bookings).toFixed(2)}` : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
     </div>
   );
 }

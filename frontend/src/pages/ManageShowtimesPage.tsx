@@ -1,190 +1,253 @@
-import { useState, useEffect } from 'react';
-import { Plus, Pencil, Trash2, CalendarDays } from 'lucide-react';
-import { store, uid } from '@/data/store';
-import type { Showtime, Movie, CinemaHall, CinemaBranch } from '@/types';
-import { useAuth } from '@/context/AuthContext';
+import { useMemo, useState } from 'react';
+import { Plus, Search, Trash2, Calendar, Clock, Film, MapPin } from 'lucide-react';
+import { getShowtimes, getMovies, getBranches, saveShowtime, deleteShowtime } from '@/data/store';
+import { useToast } from '@/contexts/ToastContext';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { Input, Select } from '@/components/ui/Input';
+import { Table } from '@/components/ui/Table';
+import type { Showtime } from '@/types';
+
+const times = ['10:00 AM', '1:15 PM', '4:30 PM', '7:00 PM', '10:15 PM'];
 
 export function ManageShowtimesPage() {
-  const { branchId } = useAuth();
-  const [showtimes, setShowtimes] = useState<Showtime[]>([]);
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [halls, setHalls] = useState<CinemaHall[]>([]);
-  const [branches, setBranches] = useState<CinemaBranch[]>([]);
-  const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<Showtime | null>(null);
+  const { toast } = useToast();
+  const [tick, setTick] = useState(0);
+
+  const showtimes = useMemo(() => getShowtimes(), [tick]);
+  const movies = useMemo(() => getMovies(), []);
+  const branches = useMemo(() => getBranches(), []);
+
+  const [search, setSearch] = useState('');
+  const [movieFilter, setMovieFilter] = useState('all');
+  const [branchFilter, setBranchFilter] = useState('all');
+  const [modalOpen, setModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Showtime | null>(null);
-  const [filterMovie, setFilterMovie] = useState('all');
 
-  const emptyForm: Omit<Showtime, 'id' | 'bookedSeats'> = {
-    movieId: '',
-    branchId: branchId ?? 'b1',
-    hallId: '',
+  const [formData, setFormData] = useState({
+    movieId: movies[0]?.id || '',
+    branchId: branches[0]?.id || '',
+    hallId: branches[0]?.halls[0]?.id || '',
     date: new Date().toISOString().split('T')[0],
-    time: '18:00',
-    price: 14.0,
-    premiumPrice: 19.0,
-  };
-  const [form, setForm] = useState(emptyForm);
+    time: times[0],
+    basePrice: 14.99,
+    premiumPrice: 22.99,
+  });
 
-  const refresh = () => {
-    const all = store.getShowtimes();
-    setShowtimes(branchId ? all.filter((s) => s.branchId === branchId) : all);
-    setMovies(store.getMovies());
-    setHalls(store.getHalls());
-    setBranches(store.getBranches());
-  };
-  useEffect(() => { refresh(); }, [branchId]);
-
-  const filtered = showtimes.filter((s) => filterMovie === 'all' || s.movieId === filterMovie);
-
-  const openAdd = () => {
-    setEditing(null);
-    setForm({ ...emptyForm, movieId: movies[0]?.id ?? '', hallId: halls.filter((h) => h.branchId === (branchId ?? 'b1'))[0]?.id ?? '' });
-    setFormOpen(true);
-  };
-  const openEdit = (s: Showtime) => {
-    setEditing(s);
-    const { id, bookedSeats, ...rest } = s;
-    void id; void bookedSeats;
-    setForm(rest);
-    setFormOpen(true);
-  };
-
-  const save = () => {
-    if (!form.movieId || !form.hallId) return;
-    const all = store.getShowtimes();
-    if (editing) {
-      const idx = all.findIndex((s) => s.id === editing.id);
-      if (idx >= 0) all[idx] = { ...all[idx], ...form };
-    } else {
-      all.push({ ...form, id: uid('s'), bookedSeats: [] });
+  const filtered = showtimes.filter(s => {
+    if (movieFilter !== 'all' && s.movieId !== movieFilter) return false;
+    if (branchFilter !== 'all' && s.branchId !== branchFilter) return false;
+    if (search) {
+      const movie = movies.find(m => m.id === s.movieId);
+      if (!movie?.title.toLowerCase().includes(search.toLowerCase())) return false;
     }
-    store.setShowtimes(all);
-    setFormOpen(false);
-    refresh();
+    return true;
+  });
+
+  const getMovieTitle = (id: string) => movies.find(m => m.id === id)?.title || 'Unknown';
+  const getBranchName = (id: string) => branches.find(b => b.id === id)?.name || 'Unknown';
+  const getHallName = (branchId: string, hallId: string) => {
+    const b = branches.find(b => b.id === branchId);
+    return b?.halls.find(h => h.id === hallId)?.name || 'Unknown';
   };
 
-  const confirmDelete = () => {
+  const availableHalls = branches.find(b => b.id === formData.branchId)?.halls || [];
+
+  const handleSave = () => {
+    if (!formData.movieId || !formData.branchId || !formData.hallId) {
+      toast('error', 'Please select a movie, branch, and hall');
+      return;
+    }
+    const showtime: Showtime = {
+      id: '',
+      ...formData,
+      bookedSeats: [],
+    };
+    saveShowtime(showtime);
+    setModalOpen(false);
+    setTick(t => t + 1);
+    toast('success', 'Showtime added successfully');
+  };
+
+  const handleDelete = () => {
     if (!deleteTarget) return;
-    store.setShowtimes(store.getShowtimes().filter((s) => s.id !== deleteTarget.id));
+    deleteShowtime(deleteTarget.id);
     setDeleteTarget(null);
-    refresh();
+    setTick(t => t + 1);
+    toast('success', 'Showtime deleted');
   };
-
-  const getMovie = (id: string) => movies.find((m) => m.id === id);
-  const getHall = (id: string) => halls.find((h) => h.id === id);
-  const getBranch = (id: string) => branches.find((b) => b.id === id);
-  const availableHalls = halls.filter((h) => h.branchId === form.branchId);
 
   return (
-    <div className="container-app py-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold">Manage Showtimes</h1>
-          <p className="text-sm text-ink-400">{branchId ? getBranch(branchId)?.name : 'All branches'} • {filtered.length} showtimes</p>
+          <h1 className="text-3xl font-display font-bold mb-2">Manage Showtimes</h1>
+          <p className="text-text-secondary">Schedule and manage movie showtimes across branches</p>
         </div>
-        <Button onClick={openAdd}><Plus className="w-4 h-4" /> Add Showtime</Button>
+        <Button onClick={() => setModalOpen(true)}>
+          <Plus className="w-4 h-4" /> Add Showtime
+        </Button>
       </div>
 
-      <div className="w-56 mb-4">
-        <Select value={filterMovie} onChange={(e) => setFilterMovie(e.target.value)}>
-          <option value="all">All Movies</option>
-          {movies.map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}
-        </Select>
-      </div>
-
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-ink-800/50 text-ink-400 text-xs uppercase tracking-wider">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium">Movie</th>
-                <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Branch / Hall</th>
-                <th className="text-left px-4 py-3 font-medium">Date & Time</th>
-                <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Price</th>
-                <th className="text-left px-4 py-3 font-medium hidden lg:table-cell">Booked</th>
-                <th className="text-right px-4 py-3 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {filtered.map((s) => {
-                const m = getMovie(s.movieId);
-                const h = getHall(s.hallId);
-                const br = getBranch(s.branchId);
-                return (
-                  <tr key={s.id} className="hover:bg-white/5 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <img src={m?.posterUrl} alt="" className="w-8 h-12 rounded object-cover shrink-0" />
-                        <span className="font-medium">{m?.title ?? 'Unknown'}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 hidden md:table-cell text-ink-300">{br?.name}<br /><span className="text-xs text-ink-400">{h?.name}</span></td>
-                    <td className="px-4 py-3">
-                      <div>{new Date(s.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
-                      <div className="text-xs text-ink-400">{s.time}</div>
-                    </td>
-                    <td className="px-4 py-3 hidden sm:table-cell">${s.price.toFixed(2)}</td>
-                    <td className="px-4 py-3 hidden lg:table-cell"><Badge variant="outline">{s.bookedSeats.length} seats</Badge></td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end gap-2">
-                        <button onClick={() => openEdit(s)} className="p-2 rounded-lg hover:bg-white/10 transition-colors"><Pencil className="w-4 h-4 text-ink-300" /></button>
-                        <button onClick={() => setDeleteTarget(s)} className="p-2 rounded-lg hover:bg-error/20 transition-colors"><Trash2 className="w-4 h-4 text-error" /></button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        {filtered.length === 0 && (
-          <div className="py-12 text-center text-ink-400">
-            <CalendarDays className="w-12 h-12 mx-auto mb-3 text-ink-600" />
-            No showtimes found.
+      <Card className="p-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+            <input
+              type="text"
+              placeholder="Search by movie..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full bg-cinema-base border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-accent-primary/50 transition-all"
+            />
           </div>
-        )}
+          <Select value={movieFilter} onChange={e => setMovieFilter(e.target.value)}>
+            <option value="all">All Movies</option>
+            {movies.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
+          </Select>
+          <Select value={branchFilter} onChange={e => setBranchFilter(e.target.value)}>
+            <option value="all">All Branches</option>
+            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </Select>
+        </div>
       </Card>
 
-      <Modal open={formOpen} onClose={() => setFormOpen(false)} title={editing ? 'Edit Showtime' : 'Add Showtime'} size="md">
+      <div className="mb-4 text-sm text-text-secondary">
+        {filtered.length} showtime{filtered.length !== 1 ? 's' : ''} found
+      </div>
+
+      <Table
+        columns={[
+          {
+            key: 'movie',
+            header: 'Movie',
+            render: (s) => (
+              <div className="flex items-center gap-2">
+                <Film className="w-4 h-4 text-text-muted flex-shrink-0" />
+                <span className="font-medium">{getMovieTitle(s.movieId)}</span>
+              </div>
+            ),
+          },
+          {
+            key: 'branch',
+            header: 'Branch',
+            render: (s) => (
+              <span className="text-text-secondary">{getBranchName(s.branchId)}</span>
+            ),
+          },
+          {
+            key: 'hall',
+            header: 'Hall',
+            render: (s) => <span className="text-text-secondary">{getHallName(s.branchId, s.hallId)}</span>,
+          },
+          {
+            key: 'date',
+            header: 'Date',
+            render: (s) => (
+              <span className="flex items-center gap-1.5 text-text-secondary">
+                <Calendar className="w-3.5 h-3.5" />
+                {new Date(s.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </span>
+            ),
+          },
+          {
+            key: 'time',
+            header: 'Time',
+            render: (s) => (
+              <span className="flex items-center gap-1.5 text-text-secondary">
+                <Clock className="w-3.5 h-3.5" />
+                {s.time}
+              </span>
+            ),
+          },
+          {
+            key: 'seats',
+            header: 'Booked',
+            render: (s) => (
+              <Badge variant={s.bookedSeats.length > 0 ? 'amber' : 'default'}>
+                {s.bookedSeats.length} seats
+              </Badge>
+            ),
+          },
+          {
+            key: 'price',
+            header: 'Price',
+            render: (s) => <span className="text-accent-primary font-medium">${s.basePrice}</span>,
+          },
+          {
+            key: 'actions',
+            header: '',
+            render: (s) => (
+              <button
+                onClick={() => setDeleteTarget(s)}
+                className="text-text-muted hover:text-accent-destructive transition-colors p-1"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            ),
+          },
+        ]}
+        data={filtered}
+        emptyMessage="No showtimes found. Add one to get started."
+      />
+
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="Add Showtime"
+        size="md"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleSave}>Add Showtime</Button>
+          </>
+        }
+      >
         <div className="space-y-4">
-          <Select label="Movie" value={form.movieId} onChange={(e) => setForm({ ...form, movieId: e.target.value })}>
-            <option value="">Select a movie</option>
-            {movies.map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}
+          <Select label="Movie" value={formData.movieId} onChange={e => setFormData({ ...formData, movieId: e.target.value })}>
+            {movies.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
           </Select>
-          <Select label="Branch" value={form.branchId} onChange={(e) => setForm({ ...form, branchId: e.target.value, hallId: '' })} disabled={!!branchId}>
-            {branches.map((b) => <option key={b.id} value={b.id}>{b.name} — {b.city}</option>)}
+          <Select
+            label="Branch"
+            value={formData.branchId}
+            onChange={e => setFormData({ ...formData, branchId: e.target.value, hallId: branches.find(b => b.id === e.target.value)?.halls[0]?.id || '' })}
+          >
+            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </Select>
-          <Select label="Cinema Hall" value={form.hallId} onChange={(e) => setForm({ ...form, hallId: e.target.value })}>
-            <option value="">Select a hall</option>
-            {availableHalls.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+          <Select label="Hall" value={formData.hallId} onChange={e => setFormData({ ...formData, hallId: e.target.value })}>
+            {availableHalls.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
           </Select>
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Date" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-            <Input label="Time" type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} />
+            <Input label="Date" type="date" value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} />
+            <Select label="Time" value={formData.time} onChange={e => setFormData({ ...formData, time: e.target.value })}>
+              {times.map(t => <option key={t} value={t}>{t}</option>)}
+            </Select>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Standard Price ($)" type="number" step="0.5" value={form.price} onChange={(e) => setForm({ ...form, price: parseFloat(e.target.value) || 0 })} />
-            <Input label="Premium Price ($)" type="number" step="0.5" value={form.premiumPrice} onChange={(e) => setForm({ ...form, premiumPrice: parseFloat(e.target.value) || 0 })} />
-          </div>
-          <div className="flex gap-3 justify-end pt-2">
-            <Button variant="ghost" onClick={() => setFormOpen(false)}>Cancel</Button>
-            <Button onClick={save}>{editing ? 'Save Changes' : 'Add Showtime'}</Button>
+            <Input label="Base Price ($)" type="number" step="0.01" value={formData.basePrice} onChange={e => setFormData({ ...formData, basePrice: parseFloat(e.target.value) || 0 })} />
+            <Input label="Premium Price ($)" type="number" step="0.01" value={formData.premiumPrice} onChange={e => setFormData({ ...formData, premiumPrice: parseFloat(e.target.value) || 0 })} />
           </div>
         </div>
       </Modal>
 
-      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Showtime" size="sm">
-        <p className="text-ink-300 mb-5">Are you sure you want to delete this showtime? This cannot be undone.</p>
-        <div className="flex gap-3 justify-end">
-          <Button variant="ghost" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-          <Button variant="danger" onClick={confirmDelete}>Delete</Button>
-        </div>
+      <Modal
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Showtime?"
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+          </>
+        }
+      >
+        <p className="text-sm text-text-secondary">
+          Delete showtime for <span className="font-medium text-text-primary">{deleteTarget && getMovieTitle(deleteTarget.movieId)}</span> on{' '}
+          {deleteTarget && new Date(deleteTarget.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at {deleteTarget?.time}?
+        </p>
       </Modal>
     </div>
   );

@@ -1,193 +1,223 @@
-import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Film, Search, Menu, X, ChevronDown, User, Ticket, BarChart3, Building2, Clapperboard, CalendarDays } from 'lucide-react';
-import { useAuth, ROLE_LABELS, hasAccess } from '@/context/AuthContext';
+import { useState, useEffect } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Film, User, LogOut, ChevronDown, Ticket, BarChart3, Building2, Users, Clapperboard, Calendar, UserCircle, Bell } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
 import type { Role } from '@/types';
+import { Button } from '@/components/ui/Button';
+import { Modal } from '@/components/ui/Modal';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
+
+const roleLabels: Record<Role, string> = {
+  customer: 'Customer',
+  cinemaManager: 'Cinema Manager',
+  admin: 'Admin',
+};
 
 export function Navbar() {
-  const { role, setRole, user } = useAuth();
-  const navigate = useNavigate();
+  const { user, login, logout, hasRole } = useAuth();
+  const { toast } = useToast();
   const location = useLocation();
+  const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [roleOpen, setRoleOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const roleRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 12);
+    const onScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', onScroll);
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
   useEffect(() => {
     setMobileOpen(false);
-    setRoleOpen(false);
+    setUserMenuOpen(false);
   }, [location.pathname]);
 
-  useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      if (roleRef.current && !roleRef.current.contains(e.target as Node)) setRoleOpen(false);
-    };
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
-  }, []);
+  const navLinks = [
+    { to: '/', label: 'Home', icon: Film, show: true },
+    { to: '/movies', label: 'Movies', icon: Clapperboard, show: true },
+    { to: '/bookings', label: 'My Bookings', icon: Ticket, show: !!user },
+    { to: '/manage/movies', label: 'Manage Movies', icon: Film, show: hasRole('cinemaManager', 'admin') },
+    { to: '/manage/showtimes', label: 'Manage Showtimes', icon: Calendar, show: hasRole('cinemaManager', 'admin') },
+    { to: '/admin/analytics', label: 'Analytics', icon: BarChart3, show: hasRole('admin') },
+    { to: '/admin/branches', label: 'Branches', icon: Building2, show: hasRole('admin') },
+    { to: '/admin/users', label: 'Users', icon: Users, show: hasRole('admin') },
+    { to: '/admin/notifications', label: 'Notification Center', icon: Bell, show: hasRole('admin') },
+  ].filter(l => l.show);
 
-  const submitSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    navigate(`/movies?q=${encodeURIComponent(search)}`);
-    setMobileOpen(false);
+  const handleLogin = (role: Role) => {
+    login(role);
+    setLoginOpen(false);
+    toast('success', `Signed in as ${roleLabels[role]}`);
   };
 
-  const customerLinks = [
-    { to: '/', label: 'Home', icon: Film },
-    { to: '/movies', label: 'Movies', icon: Clapperboard },
-    { to: '/bookings', label: 'My Bookings', icon: Ticket },
-  ];
-
-  const managerLinks = [
-    { to: '/manage/movies', label: 'Manage Movies', icon: Clapperboard, role: 'manager' as Role },
-    { to: '/manage/showtimes', label: 'Manage Showtimes', icon: CalendarDays, role: 'manager' as Role },
-  ];
-
-  const adminLinks = [
-    { to: '/admin/analytics', label: 'Analytics', icon: BarChart3, role: 'admin' as Role },
-    { to: '/admin/branches', label: 'Branches', icon: Building2, role: 'admin' as Role },
-    { to: '/admin/users', label: 'Users', icon: User, role: 'admin' as Role },
-  ];
-
-  const allLinks = [...customerLinks, ...managerLinks, ...adminLinks].filter(
-    (l) => !('role' in l) || hasAccess(role, (l as { role: Role }).role)
-  );
-
-  const roleColors: Record<Role, string> = {
-    customer: 'text-success',
-    manager: 'text-gold',
-    admin: 'text-accent',
+  const handleLogout = () => {
+    logout();
+    setUserMenuOpen(false);
+    toast('info', 'Signed out');
+    navigate('/');
   };
 
   return (
-    <header className={`fixed top-0 inset-x-0 z-40 transition-all duration-300 ${scrolled ? 'glass shadow-card' : 'bg-gradient-to-b from-ink-950 to-transparent'}`}>
-      <nav className="container-app flex items-center justify-between h-16 gap-4">
-        {/* Logo */}
-        <Link to="/" className="flex items-center gap-2 shrink-0">
-          <div className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center shadow-glow">
-            <Film className="w-5 h-5 text-white" />
-          </div>
-          <span className="text-xl font-bold tracking-tight hidden sm:block">
-            Cine<span className="text-accent">Book</span>
-          </span>
-        </Link>
-
-        {/* Desktop nav links */}
-        <div className="hidden lg:flex items-center gap-1">
-          {allLinks.map((link) => {
-            const Icon = link.icon;
-            const active = location.pathname === link.to || (link.to !== '/' && location.pathname.startsWith(link.to));
-            return (
-              <Link
-                key={link.to}
-                to={link.to}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
-                  active ? 'text-white bg-white/5' : 'text-ink-300 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                {link.label}
-              </Link>
-            );
-          })}
-        </div>
-
-        {/* Search */}
-        <form onSubmit={submitSearch} className="hidden md:flex items-center flex-1 max-w-xs">
-          <div className="relative w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search movies..."
-              className="w-full bg-ink-800/80 border border-ink-600 rounded-xl pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-accent transition-colors"
-            />
-          </div>
-        </form>
-
-        {/* Role switcher */}
-        <div ref={roleRef} className="relative shrink-0">
-          <button
-            onClick={() => setRoleOpen((o) => !o)}
-            className="flex items-center gap-2 bg-ink-800 hover:bg-ink-700 border border-ink-600 rounded-xl px-3 py-2 text-sm transition-colors"
-          >
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-accent to-gold flex items-center justify-center text-xs font-bold text-white">
-              {user.name.charAt(0)}
+    <>
+      <header
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+          scrolled ? 'glass border-b border-white/5' : 'bg-transparent'
+        }`}
+      >
+        <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2.5 group">
+            <div className="w-9 h-9 rounded-xl bg-accent-primary flex items-center justify-center group-hover:shadow-glow-amber transition-shadow">
+              <Film className="w-5 h-5 text-black" />
             </div>
-            <div className="hidden sm:block text-left">
-              <div className="text-xs text-ink-400 leading-none">Logged in as</div>
-              <div className={`text-sm font-medium leading-tight ${roleColors[role]}`}>{ROLE_LABELS[role]}</div>
-            </div>
-            <ChevronDown className={`w-4 h-4 text-ink-400 transition-transform ${roleOpen ? 'rotate-180' : ''}`} />
-          </button>
-          {roleOpen && (
-            <div className="absolute right-0 top-full mt-2 w-56 glass rounded-xl shadow-card p-2 animate-scale-in">
-              <div className="px-3 py-2 border-b border-white/5 mb-1">
-                <div className="text-sm font-medium">{user.name}</div>
-                <div className="text-xs text-ink-400">{user.email}</div>
-              </div>
-              <div className="text-xs text-ink-400 px-3 py-1">Switch role</div>
-              {(['customer', 'manager', 'admin'] as Role[]).map((r) => (
-                <button
-                  key={r}
-                  onClick={() => { setRole(r); setRoleOpen(false); }}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between ${
-                    role === r ? 'bg-accent/15 text-accent' : 'hover:bg-white/5 text-ink-200'
-                  }`}
-                >
-                  {ROLE_LABELS[r]}
-                  {role === r && <span className="w-2 h-2 rounded-full bg-accent" />}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+            <span className="text-xl font-display font-semibold tracking-tight">
+              Cine<span className="text-accent-primary">Book</span>
+            </span>
+          </Link>
 
-        {/* Mobile menu button */}
-        <button onClick={() => setMobileOpen((o) => !o)} className="lg:hidden p-2 rounded-lg hover:bg-white/5">
-          {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
-      </nav>
-
-      {/* Mobile menu */}
-      {mobileOpen && (
-        <div className="lg:hidden glass border-t border-white/5 animate-fade-in">
-          <div className="container-app py-4 space-y-3">
-            <form onSubmit={submitSearch} className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search movies..."
-                className="w-full bg-ink-800 border border-ink-600 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-accent"
-              />
-            </form>
-            {allLinks.map((link) => {
-              const Icon = link.icon;
-              const active = location.pathname === link.to || (link.to !== '/' && location.pathname.startsWith(link.to));
+          <div className="hidden lg:flex items-center gap-1">
+            {navLinks.map(link => {
+              const active = location.pathname === link.to;
               return (
                 <Link
                   key={link.to}
                   to={link.to}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    active ? 'text-white bg-white/5' : 'text-ink-300 hover:text-white hover:bg-white/5'
+                  className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-all ${
+                    active
+                      ? 'text-accent-primary bg-accent-primary/10'
+                      : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
                   }`}
                 >
-                  <Icon className="w-4 h-4" />
                   {link.label}
                 </Link>
               );
             })}
           </div>
+
+          <div className="flex items-center gap-3">
+            {user ? (
+              <>
+              <NotificationBell />
+              <div className="relative">
+                <button
+                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors"
+                >
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-black"
+                    style={{ backgroundColor: user.avatarColor }}
+                  >
+                    {user.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                  </div>
+                  <span className="hidden sm:block text-sm font-medium">{user.name.split(' ')[0]}</span>
+                  <ChevronDown className="w-4 h-4 text-text-muted" />
+                </button>
+                {userMenuOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-cinema-elevated hairline rounded-xl shadow-soft-lg py-2 animate-slide-down">
+                    <div className="px-4 py-2 border-b border-white/5">
+                      <p className="text-sm font-medium">{user.name}</p>
+                      <p className="text-xs text-text-muted">{user.email}</p>
+                      <span className="inline-block mt-1 text-xs text-accent-primary">{roleLabels[user.role]}</span>
+                    </div>
+                    <Link to="/profile" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-white/5 transition-colors">
+                      <UserCircle className="w-4 h-4" /> Profile
+                    </Link>
+                    {hasRole('cinemaManager', 'admin') && (
+                      <>
+                        <Link to="/manage/movies" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-white/5 transition-colors lg:hidden">
+                          <Film className="w-4 h-4" /> Manage Movies
+                        </Link>
+                        <Link to="/manage/showtimes" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-white/5 transition-colors lg:hidden">
+                          <Calendar className="w-4 h-4" /> Manage Showtimes
+                        </Link>
+                      </>
+                    )}
+                    {hasRole('admin') && (
+                      <>
+                        <Link to="/admin/analytics" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-white/5 transition-colors lg:hidden">
+                          <BarChart3 className="w-4 h-4" /> Analytics
+                        </Link>
+                        <Link to="/admin/notifications" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-white/5 transition-colors lg:hidden">
+                          <Bell className="w-4 h-4" /> Notification Center
+                        </Link>
+                      </>
+                    )}
+                    <button onClick={handleLogout} className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-text-secondary hover:text-accent-destructive hover:bg-white/5 transition-colors border-t border-white/5">
+                      <LogOut className="w-4 h-4" /> Sign Out
+                    </button>
+                  </div>
+                )}
+              </div>
+              </>
+            ) : (
+              <Button size="sm" onClick={() => setLoginOpen(true)}>
+                <User className="w-4 h-4" /> Sign In
+              </Button>
+            )}
+
+            <button
+              onClick={() => setMobileOpen(!mobileOpen)}
+              className="lg:hidden p-2 rounded-lg hover:bg-white/5 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                {mobileOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                )}
+              </svg>
+            </button>
+          </div>
+        </nav>
+
+        {mobileOpen && (
+          <div className="lg:hidden glass border-t border-white/5 py-3 animate-slide-down">
+            <div className="max-w-7xl mx-auto px-4 flex flex-col gap-1">
+              {navLinks.map(link => {
+                const active = location.pathname === link.to;
+                return (
+                  <Link
+                    key={link.to}
+                    to={link.to}
+                    className={`flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                      active ? 'text-accent-primary bg-accent-primary/10' : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
+                    }`}
+                  >
+                    <link.icon className="w-4 h-4" /> {link.label}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </header>
+
+      <Modal open={loginOpen} onClose={() => setLoginOpen(false)} title="Choose a role to sign in" size="sm">
+        <p className="text-sm text-text-secondary mb-5">
+          This is a demo — pick a role to explore the platform from that perspective.
+        </p>
+        <div className="space-y-3">
+          {(['customer', 'cinemaManager', 'admin'] as Role[]).map(role => (
+            <button
+              key={role}
+              onClick={() => handleLogin(role)}
+              className="w-full flex items-center justify-between p-4 rounded-xl bg-cinema-elevated hover:bg-cinema-border border border-white/5 hover:border-accent-primary/30 transition-all group"
+            >
+              <div className="text-left">
+                <p className="font-medium">{roleLabels[role]}</p>
+                <p className="text-xs text-text-muted mt-0.5">
+                  {role === 'customer' && 'Browse, book, and manage tickets'}
+                  {role === 'cinemaManager' && 'Manage movies, showtimes & halls'}
+                  {role === 'admin' && 'Full access — analytics, branches & users'}
+                </p>
+              </div>
+              <ChevronDown className="w-5 h-5 text-text-muted group-hover:text-accent-primary -rotate-90 transition-all" />
+            </button>
+          ))}
         </div>
-      )}
-    </header>
+      </Modal>
+    </>
   );
 }

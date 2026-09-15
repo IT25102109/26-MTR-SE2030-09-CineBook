@@ -1,75 +1,296 @@
-import { movies as seedMovies, showtimes as seedShowtimes, halls as seedHalls, branches as seedBranches, users as seedUsers, seedBookings } from '@/data/mockData';
-import type { Movie, Showtime, CinemaHall, CinemaBranch, AppUser, Booking } from '@/types';
+import { mockMovies, mockBranches, mockShowtimes, mockBookings, mockUsers, mockAdminUsers, mockNotifications, mockNotificationTemplates } from '@/data/mockData';
+import type { Movie, Branch, Showtime, Booking, User, Role, Notification, NotificationTemplate, NotificationPreferences } from '@/types';
 
 const KEYS = {
-  movies: 'cinebook.movies',
-  showtimes: 'cinebook.showtimes',
-  halls: 'cinebook.halls',
-  branches: 'cinebook.branches',
-  users: 'cinebook.users',
-  bookings: 'cinebook.bookings',
-  role: 'cinebook.role',
-  seeded: 'cinebook.seeded.v1',
+  movies: 'cinebook_movies',
+  branches: 'cinebook_branches',
+  showtimes: 'cinebook_showtimes',
+  bookings: 'cinebook_bookings',
+  users: 'cinebook_users',
+  currentUser: 'cinebook_current_user',
+  seeded: 'cinebook_seeded',
+  notifications: 'cinebook_notifications',
+  notificationTemplates: 'cinebook_notification_templates',
+  notificationPrefs: 'cinebook_notification_prefs',
 };
 
-function read<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
+export function seedData(): void {
+  if (localStorage.getItem(KEYS.seeded)) return;
+  localStorage.setItem(KEYS.movies, JSON.stringify(mockMovies));
+  localStorage.setItem(KEYS.branches, JSON.stringify(mockBranches));
+  localStorage.setItem(KEYS.showtimes, JSON.stringify(mockShowtimes));
+  localStorage.setItem(KEYS.bookings, JSON.stringify(mockBookings));
+  localStorage.setItem(KEYS.users, JSON.stringify(mockAdminUsers));
+  localStorage.setItem(KEYS.notifications, JSON.stringify(mockNotifications));
+  localStorage.setItem(KEYS.notificationTemplates, JSON.stringify(mockNotificationTemplates));
+  localStorage.setItem(KEYS.seeded, 'true');
+}
+
+function read<T>(key: string): T[] {
+  const data = localStorage.getItem(key);
+  return data ? JSON.parse(data) : [];
+}
+
+function write<T>(key: string, data: T[]): void {
+  localStorage.setItem(key, JSON.stringify(data));
+}
+
+// Movies
+export function getMovies(): Movie[] {
+  return read<Movie>(KEYS.movies);
+}
+
+export function getMovie(id: string): Movie | undefined {
+  return getMovies().find(m => m.id === id);
+}
+
+export function saveMovie(movie: Movie): void {
+  const movies = getMovies();
+  const idx = movies.findIndex(m => m.id === movie.id);
+  if (idx >= 0) {
+    movies[idx] = movie;
+  } else {
+    movies.push({ ...movie, id: `m${Date.now()}` });
+  }
+  write(KEYS.movies, movies);
+}
+
+export function deleteMovie(id: string): void {
+  write(KEYS.movies, getMovies().filter(m => m.id !== id));
+}
+
+// Branches
+export function getBranches(): Branch[] {
+  return read<Branch>(KEYS.branches);
+}
+
+export function getBranch(id: string): Branch | undefined {
+  return getBranches().find(b => b.id === id);
+}
+
+export function saveBranch(branch: Branch): void {
+  const branches = getBranches();
+  const idx = branches.findIndex(b => b.id === branch.id);
+  if (idx >= 0) {
+    branches[idx] = branch;
+  } else {
+    branches.push({ ...branch, id: `b${Date.now()}` });
+  }
+  write(KEYS.branches, branches);
+}
+
+export function deleteBranch(id: string): void {
+  write(KEYS.branches, getBranches().filter(b => b.id !== id));
+}
+
+// Showtimes
+export function getShowtimes(): Showtime[] {
+  return read<Showtime>(KEYS.showtimes);
+}
+
+export function getShowtimesByMovie(movieId: string): Showtime[] {
+  return getShowtimes().filter(s => s.movieId === movieId);
+}
+
+export function getShowtime(id: string): Showtime | undefined {
+  return getShowtimes().find(s => s.id === id);
+}
+
+export function saveShowtime(showtime: Showtime): void {
+  const showtimes = getShowtimes();
+  const idx = showtimes.findIndex(s => s.id === showtime.id);
+  if (idx >= 0) {
+    showtimes[idx] = showtime;
+  } else {
+    showtimes.push({ ...showtime, id: `s${Date.now()}` });
+  }
+  write(KEYS.showtimes, showtimes);
+}
+
+export function deleteShowtime(id: string): void {
+  write(KEYS.showtimes, getShowtimes().filter(s => s.id !== id));
+}
+
+export function updateShowtimeSeats(showtimeId: string, seats: string[]): void {
+  const showtimes = getShowtimes();
+  const idx = showtimes.findIndex(s => s.id === showtimeId);
+  if (idx >= 0) {
+    showtimes[idx].bookedSeats = [...showtimes[idx].bookedSeats, ...seats];
+    write(KEYS.showtimes, showtimes);
   }
 }
 
-function write<T>(key: string, value: T): void {
-  localStorage.setItem(key, JSON.stringify(value));
+// Bookings
+export function getBookings(): Booking[] {
+  return read<Booking>(KEYS.bookings);
 }
 
-export function seedIfNeeded(): void {
-  if (!localStorage.getItem(KEYS.seeded)) {
-    write(KEYS.movies, seedMovies);
-    write(KEYS.showtimes, seedShowtimes);
-    write(KEYS.halls, seedHalls);
-    write(KEYS.branches, seedBranches);
-    write(KEYS.users, seedUsers);
-    write(KEYS.bookings, seedBookings);
-    localStorage.setItem(KEYS.seeded, '1');
+export function getUserBookings(userId: string): Booking[] {
+  return getBookings().filter(b => b.userId === userId);
+}
+
+export function saveBooking(booking: Booking): void {
+  const bookings = getBookings();
+  bookings.push(booking);
+  write(KEYS.bookings, bookings);
+}
+
+export function updateBooking(id: string, updates: Partial<Booking>): void {
+  const bookings = getBookings();
+  const idx = bookings.findIndex(b => b.id === id);
+  if (idx >= 0) {
+    bookings[idx] = { ...bookings[idx], ...updates };
+    write(KEYS.bookings, bookings);
   }
 }
 
-export function resetData(): void {
-  write(KEYS.movies, seedMovies);
-  write(KEYS.showtimes, seedShowtimes);
-  write(KEYS.halls, seedHalls);
-  write(KEYS.branches, seedBranches);
-  write(KEYS.users, seedUsers);
-  write(KEYS.bookings, seedBookings);
-  localStorage.setItem(KEYS.seeded, '1');
+// Users
+export function getUsers(): User[] {
+  return read<User>(KEYS.users);
 }
 
-export const store = {
-  getMovies: (): Movie[] => read(KEYS.movies, seedMovies),
-  setMovies: (v: Movie[]) => write(KEYS.movies, v),
+export function saveUser(user: User): void {
+  const users = getUsers();
+  const idx = users.findIndex(u => u.id === user.id);
+  if (idx >= 0) {
+    users[idx] = user;
+  } else {
+    users.push({ ...user, id: `u${Date.now()}` });
+  }
+  write(KEYS.users, users);
+}
 
-  getShowtimes: (): Showtime[] => read(KEYS.showtimes, seedShowtimes),
-  setShowtimes: (v: Showtime[]) => write(KEYS.showtimes, v),
+export function deleteUser(id: string): void {
+  write(KEYS.users, getUsers().filter(u => u.id !== id));
+}
 
-  getHalls: (): CinemaHall[] => read(KEYS.halls, seedHalls),
-  setHalls: (v: CinemaHall[]) => write(KEYS.halls, v),
+// Auth
+export function getCurrentUser(): User | null {
+  const data = localStorage.getItem(KEYS.currentUser);
+  return data ? JSON.parse(data) : null;
+}
 
-  getBranches: (): CinemaBranch[] => read(KEYS.branches, seedBranches),
-  setBranches: (v: CinemaBranch[]) => write(KEYS.branches, v),
+export function setCurrentUser(user: User | null): void {
+  if (user) {
+    localStorage.setItem(KEYS.currentUser, JSON.stringify(user));
+  } else {
+    localStorage.removeItem(KEYS.currentUser);
+  }
+}
 
-  getUsers: (): AppUser[] => read(KEYS.users, seedUsers),
-  setUsers: (v: AppUser[]) => write(KEYS.users, v),
+export function loginAsRole(role: Role): User {
+  const user = mockUsers.find(u => u.role === role)!;
+  setCurrentUser(user);
+  return user;
+}
 
-  getBookings: (): Booking[] => read(KEYS.bookings, seedBookings),
-  setBookings: (v: Booking[]) => write(KEYS.bookings, v),
+export function getHall(branchId: string, hallId: string) {
+  const branch = getBranch(branchId);
+  return branch?.halls.find(h => h.id === hallId);
+}
 
-  getRole: (): string | null => localStorage.getItem(KEYS.role),
-  setRole: (role: string) => localStorage.setItem(KEYS.role, role),
-  clearRole: () => localStorage.removeItem(KEYS.role),
-};
+// Notifications
+export function getNotifications(): Notification[] {
+  return read<Notification>(KEYS.notifications);
+}
 
-export const uid = (prefix = 'id'): string => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+export function getUserNotifications(userId: string): Notification[] {
+  return getNotifications()
+    .filter(n => n.userId === userId)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export function saveNotification(notification: Notification): void {
+  const notifications = getNotifications();
+  notifications.push(notification);
+  write(KEYS.notifications, notifications);
+}
+
+export function markNotificationRead(id: string): void {
+  const notifications = getNotifications();
+  const idx = notifications.findIndex(n => n.id === id);
+  if (idx >= 0) {
+    notifications[idx].read = true;
+    if (notifications[idx].status === 'sent') notifications[idx].status = 'read';
+    write(KEYS.notifications, notifications);
+  }
+}
+
+export function markAllNotificationsRead(userId: string): void {
+  const notifications = getNotifications();
+  notifications.forEach(n => {
+    if (n.userId === userId) {
+      n.read = true;
+      if (n.status === 'sent') n.status = 'read';
+    }
+  });
+  write(KEYS.notifications, notifications);
+}
+
+export function deleteNotification(id: string): void {
+  write(KEYS.notifications, getNotifications().filter(n => n.id !== id));
+}
+
+export function broadcastNotification(
+  notification: Omit<Notification, 'id' | 'userId' | 'read' | 'createdAt' | 'status'>,
+  targetUserIds: string[]
+): void {
+  const notifications = getNotifications();
+  const now = new Date().toISOString();
+  targetUserIds.forEach(userId => {
+    notifications.push({
+      ...notification,
+      id: `n${Date.now()}_${userId}_${Math.random().toString(36).slice(2, 6)}`,
+      userId,
+      read: false,
+      createdAt: now,
+      status: 'sent',
+    });
+  });
+  write(KEYS.notifications, notifications);
+}
+
+// Notification Templates
+export function getNotificationTemplates(): NotificationTemplate[] {
+  return read<NotificationTemplate>(KEYS.notificationTemplates);
+}
+
+export function saveNotificationTemplate(template: NotificationTemplate): void {
+  const templates = getNotificationTemplates();
+  const idx = templates.findIndex(t => t.id === template.id);
+  if (idx >= 0) {
+    templates[idx] = template;
+  } else {
+    templates.push({ ...template, id: `tpl${Date.now()}` });
+  }
+  write(KEYS.notificationTemplates, templates);
+}
+
+export function deleteNotificationTemplate(id: string): void {
+  write(KEYS.notificationTemplates, getNotificationTemplates().filter(t => t.id !== id));
+}
+
+// Notification Preferences
+export function getNotificationPreferences(userId: string): NotificationPreferences {
+  const data = localStorage.getItem(`${KEYS.notificationPrefs}_${userId}`);
+  if (data) return JSON.parse(data);
+  return {
+    email: true,
+    push: true,
+    booking_confirmation: true,
+    showtime_reminder: true,
+    price_alert: true,
+    system_announcement: true,
+  };
+}
+
+export function saveNotificationPreferences(userId: string, prefs: NotificationPreferences): void {
+  localStorage.setItem(`${KEYS.notificationPrefs}_${userId}`, JSON.stringify(prefs));
+}
+
+// All sent notifications (for admin view)
+export function getAllSentNotifications(): Notification[] {
+  return getNotifications()
+    .filter(n => n.audience)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}

@@ -1,52 +1,82 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://api.fontshare.com/v2/css?f[]=clash-display@400,500,600,700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  html {
-    scroll-behavior: smooth;
-  }
-  body {
-    @apply bg-ink-950 text-ink-100 font-sans antialiased;
-  }
   * {
-    scrollbar-width: thin;
-    scrollbar-color: #2e2e36 transparent;
+    @apply border-cinema-border;
   }
-  *::-webkit-scrollbar {
+
+  body {
+    @apply bg-cinema-base text-text-primary font-body antialiased;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
-  *::-webkit-scrollbar-thumb {
-    @apply bg-ink-600 rounded-full;
+
+  ::-webkit-scrollbar-track {
+    @apply bg-cinema-base;
   }
-  *::-webkit-scrollbar-track {
-    background: transparent;
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-cinema-elevated rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-text-muted;
+  }
+
+  /* Selection */
+  ::selection {
+    @apply bg-accent-primary/30 text-text-primary;
   }
 }
 
 @layer components {
-  .container-app {
-    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  .skeleton {
+    @apply bg-gradient-to-r from-cinema-card via-cinema-elevated to-cinema-card bg-[length:1000px_100%] animate-shimmer;
   }
+
   .glass {
-    @apply bg-ink-900/70 backdrop-blur-xl border border-white/5;
+    @apply backdrop-blur-xl bg-black/40;
   }
-  .card-hover {
-    @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-card;
+
+  .hairline {
+    @apply border border-white/5;
   }
-  .gradient-text {
-    @apply bg-gradient-to-r from-accent to-gold bg-clip-text text-transparent;
+
+  .text-gradient-amber {
+    @apply bg-gradient-to-r from-accent-primary to-amber-300 bg-clip-text text-transparent;
   }
-  .section-title {
-    @apply text-2xl md:text-3xl font-bold tracking-tight;
+
+  .scrim-bottom {
+    background: linear-gradient(to top, rgba(10, 10, 12, 0.95) 0%, rgba(10, 10, 12, 0.5) 50%, transparent 100%);
+  }
+
+  .scrim-left {
+    background: linear-gradient(to right, rgba(10, 10, 12, 0.95) 0%, rgba(10, 10, 12, 0.7) 40%, transparent 100%);
   }
 }
 
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+@layer utilities {
+  .animate-stagger-1 { animation-delay: 0.05s; opacity: 0; }
+  .animate-stagger-2 { animation-delay: 0.1s; opacity: 0; }
+  .animate-stagger-3 { animation-delay: 0.15s; opacity: 0; }
+  .animate-stagger-4 { animation-delay: 0.2s; opacity: 0; }
+  .animate-stagger-5 { animation-delay: 0.25s; opacity: 0; }
+  .animate-stagger-6 { animation-delay: 0.3s; opacity: 0; }
+  .animate-stagger-7 { animation-delay: 0.35s; opacity: 0; }
+  .animate-stagger-8 { animation-delay: 0.4s; opacity: 0; }
 }

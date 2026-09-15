@@ -1,19 +1,21 @@
-import { type ReactNode } from 'react';
+import { type HTMLAttributes, forwardRef } from 'react';
 
-interface CardProps {
-  children: ReactNode;
-  className?: string;
+interface CardProps extends HTMLAttributes<HTMLDivElement> {
   hover?: boolean;
-  onClick?: () => void;
 }
 
-export function Card({ children, className = '', hover, onClick }: CardProps) {
-  return (
-    <div
-      onClick={onClick}
-      className={`bg-ink-850 rounded-2xl border border-white/5 ${hover ? 'card-hover cursor-pointer' : 'transition-shadow'} ${className}`}
-    >
-      {children}
-    </div>
-  );
-}
+export const Card = forwardRef<HTMLDivElement, CardProps>(
+  ({ hover, className = '', children, ...props }, ref) => {
+    return (
+      <div
+        ref={ref}
+        className={`bg-cinema-card hairline rounded-2xl ${hover ? 'transition-all duration-300 hover:bg-cinema-elevated hover:border-white/10 hover:shadow-soft-lg' : ''} ${className}`}
+        {...props}
+      >
+        {children}
+      </div>
+    );
+  }
+);
+
+Card.displayName = 'Card';

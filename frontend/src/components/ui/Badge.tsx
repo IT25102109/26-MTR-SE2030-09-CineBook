@@ -1,20 +1,25 @@
 import { type ReactNode } from 'react';
 
-type BadgeVariant = 'default' | 'accent' | 'gold' | 'success' | 'warning' | 'error' | 'outline';
+type BadgeVariant = 'default' | 'amber' | 'red' | 'green' | 'blue' | 'outline';
 
-const styles: Record<BadgeVariant, string> = {
-  default: 'bg-ink-700 text-ink-200',
-  accent: 'bg-accent/15 text-accent border border-accent/30',
-  gold: 'bg-gold/15 text-gold border border-gold/30',
-  success: 'bg-success/15 text-success border border-success/30',
-  warning: 'bg-warning/15 text-warning border border-warning/30',
-  error: 'bg-error/15 text-error border border-error/30',
-  outline: 'border border-ink-500 text-ink-200',
+interface BadgeProps {
+  variant?: BadgeVariant;
+  children: ReactNode;
+  className?: string;
+}
+
+const variants: Record<BadgeVariant, string> = {
+  default: 'bg-cinema-elevated text-text-secondary border border-white/10',
+  amber: 'bg-accent-primary/15 text-accent-primary border border-accent-primary/20',
+  red: 'bg-accent-destructive/15 text-accent-destructive border border-accent-destructive/20',
+  green: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20',
+  blue: 'bg-blue-500/15 text-blue-400 border border-blue-500/20',
+  outline: 'border border-white/15 text-text-secondary',
 };
 
-export function Badge({ children, variant = 'default', className = '' }: { children: ReactNode; variant?: BadgeVariant; className?: string }) {
+export function Badge({ variant = 'default', children, className = '' }: BadgeProps) {
   return (
-    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${styles[variant]} ${className}`}>
+    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-medium ${variants[variant]} ${className}`}>
       {children}
     </span>
   );
