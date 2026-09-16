@@ -41,7 +41,38 @@ public class ShowtimeService {
         return showtimeRepository.findByBranchId(branchId);
     }
 
+    /**
+     * Dynamic Pricing Engine (Function 2):
+     * - Weekend screenings (Saturday & Sunday): +20% surge
+     * - Peak evening hours (>= 17:00 / 5 PM): +15% surge
+     */
+    public double calculateDynamicPrice(double basePrice, String dateStr, String timeStr) {
+        double multiplier = 1.0;
+        try {
+            if (dateStr != null && !dateStr.isBlank()) {
+                java.time.DayOfWeek day = java.time.LocalDate.parse(dateStr).getDayOfWeek();
+                if (day == java.time.DayOfWeek.SATURDAY || day == java.time.DayOfWeek.SUNDAY) {
+                    multiplier += 0.20;
+                }
+            }
+            if (timeStr != null && !timeStr.isBlank()) {
+                int hour = Integer.parseInt(timeStr.split(":")[0]);
+                if (hour >= 17) {
+                    multiplier += 0.15;
+                }
+            }
+        } catch (Exception ignored) {}
+        return Math.round(basePrice * multiplier * 100.0) / 100.0;
+    }
+
     public Showtime createShowtime(Showtime showtime) {
+        if (showtime.getBasePrice() > 0 && showtime.getDate() != null && showtime.getTime() != null) {
+            double dynamicBase = calculateDynamicPrice(showtime.getBasePrice(), showtime.getDate(), showtime.getTime());
+            showtime.setBasePrice(dynamicBase);
+            if (showtime.getPremiumPrice() <= 0) {
+                showtime.setPremiumPrice(Math.round(dynamicBase * 1.35 * 100.0) / 100.0);
+            }
+        }
         return showtimeRepository.save(showtime);
     }
 
