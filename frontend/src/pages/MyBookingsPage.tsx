@@ -1,27 +1,133 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, Clock, Ticket, Film, X, AlertCircle, RotateCcw } from 'lucide-react';
+import {
+  Calendar,
+  Clock,
+  Ticket,
+  Film,
+  X,
+  AlertCircle,
+  RotateCcw,
+  RefreshCw,
+  CheckCircle2,
+  DollarSign,
+  Search,
+  ShieldCheck,
+  ArrowRight,
+  Info
+} from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useNotifications } from '@/contexts/NotificationContext';
-import { getUserBookings, updateBooking, saveNotification, getUsers } from '@/data/store';
+import {
+  getUserBookings,
+  cancelBookingWithRefund,
+  rescheduleBooking,
+  getShowtimesByMovie,
+  getShowtime,
+  getHall,
+  saveNotification,
+  getUsers
+} from '@/data/store';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
-import type { Booking } from '@/types';
+import { Input } from '@/components/ui/Input';
+import type { Booking, Showtime } from '@/types';
+
+type FilterTab = 'all' | 'upcoming' | 'completed' | 'cancelled';
+
+interface RefundCalculation {
+  tier: 'full' | 'partial' | 'none';
+  percentage: number;
+  refundAmount: number;
+  cancellationFee: number;
+  hoursRemaining: number;
+  label: string;
+}
 
 export function MyBookingsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const { addNotification } = useNotifications();
+
+  const [activeTab, setActiveTab] = useState<FilterTab>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
+  const [rescheduleTarget, setRescheduleTarget] = useState<Booking | null>(null);
+  const [selectedNewShowtime, setSelectedNewShowtime] = useState<Showtime | null>(null);
   const [tick, setTick] = useState(0);
 
-  const bookings = useMemo(() => {
+  const allBookings = useMemo(() => {
     if (!user) return [];
-    return getUserBookings(user.id).sort((a, b) => new Date(b.bookingDate).getTime() - new Date(a.bookingDate).getTime());
+    return getUserBookings(user.id).sort(
+      (a, b) => new Date(b.bookingDate).getTime() - new Date(a.bookingDate).getTime()
+    );
   }, [user, tick]);
+
+  // Calculate Tiered Refund based on hours before showtime
+  const calculateRefund = (booking: Booking): RefundCalculation => {
+    try {
+      const showtimeDateStr = `${booking.date}T${booking.time}:00`;
+      const showtimeTime = new Date(showtimeDateStr).getTime();
+      const now = Date.now();
+      const diffHours = (showtimeTime - now) / (1000 * 60 * 60);
+
+      if (diffHours > 24) {
+        return {
+          tier: 'full',
+          percentage: 100,
+          refundAmount: booking.totalAmount,
+          cancellationFee: 0,
+          hoursRemaining: Math.max(0, diffHours),
+          label: '100% Full Refund (>24h prior)',
+        };
+      } else if (diffHours >= 6) {
+        const fee = booking.totalAmount * 0.5;
+        return {
+          tier: 'partial',
+          percentage: 50,
+          refundAmount: booking.totalAmount * 0.5,
+          cancellationFee: fee,
+          hoursRemaining: Math.max(0, diffHours),
+          label: '50% Partial Refund (6h-24h prior)',
+        };
+      } else {
+        return {
+          tier: 'none',
+          percentage: 0,
+          refundAmount: 0,
+          cancellationFee: booking.totalAmount,
+          hoursRemaining: Math.max(0, diffHours),
+          label: 'Non-Refundable (<6h prior)',
+        };
+      }
+    } catch {
+      return {
+        tier: 'full',
+        percentage: 100,
+        refundAmount: booking.totalAmount,
+        cancellationFee: 0,
+        hoursRemaining: 48,
+        label: '100% Full Refund',
+      };
+    }
+  };
+
+  // Alternate showtimes for rescheduling
+  const availableAlternateShowtimes = useMemo(() => {
+    if (!rescheduleTarget) return [];
+    const alternates = getShowtimesByMovie(rescheduleTarget.movieId).filter(
+      s =>
+        s.id !== rescheduleTarget.showtimeId &&
+        s.branchId === rescheduleTarget.branchId &&
+        new Date(`${s.date}T${s.time}:00`).getTime() > Date.now()
+    );
+    return alternates.sort(
+      (a, b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime()
+    );
+  }, [rescheduleTarget]);
 
   if (!user) {
     return (
@@ -33,20 +139,46 @@ export function MyBookingsPage() {
     );
   }
 
-  const upcoming = bookings.filter(b => b.status === 'confirmed' && new Date(b.date) >= new Date(new Date().toDateString()));
-  const past = bookings.filter(b => b.status === 'cancelled' || new Date(b.date) < new Date(new Date().toDateString()));
+  const todayStr = new Date().toDateString();
+
+  // Filter bookings
+  const filteredBookings = allBookings.filter(b => {
+    const isPast = new Date(b.date) < new Date(todayStr);
+    const isCancelled = b.status === 'cancelled';
+
+    if (activeTab === 'upcoming' && (isCancelled || isPast)) return false;
+    if (activeTab === 'completed' && (isCancelled || !isPast)) return false;
+    if (activeTab === 'cancelled' && !isCancelled) return false;
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchTitle = b.movieTitle.toLowerCase().includes(q);
+      const matchId = b.id.toLowerCase().includes(q);
+      const matchBranch = b.branchName.toLowerCase().includes(q);
+      if (!matchTitle && !matchId && !matchBranch) return false;
+    }
+
+    return true;
+  });
 
   const confirmCancel = () => {
     if (!cancelTarget) return;
-    updateBooking(cancelTarget.id, { status: 'cancelled', refundStatus: 'pending' });
+    const calc = calculateRefund(cancelTarget);
+
+    cancelBookingWithRefund(cancelTarget.id, calc.refundAmount);
     setCancelTarget(null);
     setTick(t => t + 1);
-    toast('success', 'Booking cancelled. Refund is being processed.');
+
+    if (calc.refundAmount > 0) {
+      toast('success', `Booking cancelled. A refund of $${calc.refundAmount.toFixed(2)} (${calc.percentage}%) was approved.`);
+    } else {
+      toast('info', 'Booking cancelled. As per cinema policy, cancellations within 6h are non-refundable.');
+    }
 
     addNotification({
       type: 'cancellation_refund',
       title: 'Booking Cancelled',
-      message: `Your booking for ${cancelTarget.movieTitle} has been cancelled. A refund of ${cancelTarget.totalAmount.toFixed(2)} is being processed.`,
+      message: `Your booking for ${cancelTarget.movieTitle} has been cancelled. Seats ${cancelTarget.seats.join(', ')} were released. Refund: $${calc.refundAmount.toFixed(2)}.`,
     });
 
     const allUsers = getUsers();
@@ -55,8 +187,8 @@ export function MyBookingsPage() {
       saveNotification({
         id: `n${Date.now()}_${m.id}`,
         type: 'cancellation_refund',
-        title: 'Booking Cancelled',
-        message: `A booking for ${cancelTarget.movieTitle} at ${cancelTarget.branchName} has been cancelled. Refund pending.`,
+        title: 'Booking Cancelled & Seats Released',
+        message: `Booking #${cancelTarget.id} for ${cancelTarget.movieTitle} cancelled. Seats ${cancelTarget.seats.join(', ')} released back to inventory. Refund: $${calc.refundAmount.toFixed(2)}.`,
         userId: m.id,
         read: false,
         createdAt: new Date().toISOString(),
@@ -65,68 +197,156 @@ export function MyBookingsPage() {
     });
   };
 
+  const confirmReschedule = () => {
+    if (!rescheduleTarget || !selectedNewShowtime) return;
+
+    const hall = getHall(selectedNewShowtime.branchId, selectedNewShowtime.hallId);
+    const hallName = hall ? hall.name : selectedNewShowtime.hallId;
+
+    rescheduleBooking(
+      rescheduleTarget.id,
+      selectedNewShowtime.id,
+      selectedNewShowtime.date,
+      selectedNewShowtime.time,
+      hallName
+    );
+
+    const oldDate = rescheduleTarget.date;
+    const oldTime = rescheduleTarget.time;
+    setRescheduleTarget(null);
+    setSelectedNewShowtime(null);
+    setTick(t => t + 1);
+
+    toast('success', `Showtime rescheduled to ${selectedNewShowtime.date} at ${selectedNewShowtime.time}!`);
+
+    addNotification({
+      type: 'booking_confirmation',
+      title: 'Showtime Rescheduled',
+      message: `Your tickets for ${rescheduleTarget.movieTitle} have been rescheduled from ${oldDate} ${oldTime} to ${selectedNewShowtime.date} ${selectedNewShowtime.time}.`,
+      link: `/ticket/${rescheduleTarget.id}`,
+    });
+  };
+
   const renderBookingCard = (booking: Booking) => {
-    const isPast = new Date(booking.date) < new Date(new Date().toDateString());
+    const isPast = new Date(booking.date) < new Date(todayStr);
     const isCancelled = booking.status === 'cancelled';
+    const refundCalc = calculateRefund(booking);
 
     return (
-      <Card key={booking.id} hover className="overflow-hidden animate-fade-in-up">
+      <Card key={booking.id} hover className="overflow-hidden animate-fade-in-up border border-white/5">
         <div className="flex flex-col sm:flex-row">
           <div className="flex-shrink-0">
-            <img src={booking.moviePoster} alt={booking.movieTitle} className="w-full sm:w-28 h-40 sm:h-full object-cover" />
+            <img
+              src={booking.moviePoster}
+              alt={booking.movieTitle}
+              className="w-full sm:w-32 h-44 sm:h-full object-cover"
+            />
           </div>
-          <div className="flex-1 p-5">
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <div>
-                <h3 className="font-display font-semibold text-lg mb-1">{booking.movieTitle}</h3>
-                <p className="text-sm text-text-muted">{booking.branchName} • {booking.hallName}</p>
+          <div className="flex-1 p-5 flex flex-col justify-between">
+            <div>
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <h3 className="font-display font-semibold text-lg">{booking.movieTitle}</h3>
+                    {booking.rescheduledFrom && (
+                      <span className="text-[11px] font-mono bg-accent-primary/10 text-accent-primary px-2 py-0.5 rounded border border-accent-primary/20">
+                        Rescheduled
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-text-muted">
+                    {booking.branchName} • {booking.hallName}
+                  </p>
+                </div>
+
+                <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                  {isCancelled ? (
+                    <Badge variant="red">Cancelled</Badge>
+                  ) : isPast ? (
+                    <Badge variant="default">Completed</Badge>
+                  ) : (
+                    <Badge variant="green">Upcoming</Badge>
+                  )}
+
+                  {isCancelled && booking.refundAmount !== undefined && (
+                    <Badge variant={booking.refundAmount > 0 ? 'blue' : 'amber'} className="text-[11px]">
+                      {booking.refundAmount > 0
+                        ? `Refunded $${booking.refundAmount.toFixed(2)}`
+                        : 'No Refund (<6h)'}
+                    </Badge>
+                  )}
+                </div>
               </div>
-              <div className="flex flex-col items-end gap-1.5">
-                {isCancelled ? (
-                  <Badge variant="red">Cancelled</Badge>
-                ) : isPast ? (
-                  <Badge variant="default">Completed</Badge>
-                ) : (
-                  <Badge variant="green">Upcoming</Badge>
-                )}
-                {booking.refundStatus === 'pending' && <Badge variant="amber">Refund Pending</Badge>}
-                {booking.refundStatus === 'processed' && <Badge variant="blue">Refunded</Badge>}
+
+              <div className="flex items-center gap-4 text-sm text-text-secondary mb-3 flex-wrap">
+                <span className="flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-text-muted" />
+                  {new Date(booking.date).toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                  })}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-text-muted" />
+                  {booking.time}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Film className="w-4 h-4 text-text-muted" />
+                  Seats: {booking.seats.sort().join(', ')}
+                </span>
               </div>
+
+              {booking.rescheduledFrom && (
+                <p className="text-xs text-text-muted mb-3 flex items-center gap-1.5">
+                  <RefreshCw className="w-3.5 h-3.5 text-accent-primary" />
+                  Originally booked for: <span className="font-mono text-text-secondary">{booking.rescheduledFrom}</span>
+                </p>
+              )}
             </div>
 
-            <div className="flex items-center gap-4 text-sm text-text-secondary mb-3 flex-wrap">
-              <span className="flex items-center gap-1.5">
-                <Calendar className="w-4 h-4 text-text-muted" />
-                {new Date(booking.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Clock className="w-4 h-4 text-text-muted" />
-                {booking.time}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Film className="w-4 h-4 text-text-muted" />
-                {booking.seats.join(', ')}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between pt-3 border-t border-white/5 flex-wrap gap-3">
               <div>
-                <span className="text-xs text-text-muted">{booking.seats.length} {booking.seats.length === 1 ? 'seat' : 'seats'}</span>
-                <span className="ml-2 font-display font-bold text-accent-primary">${booking.totalAmount.toFixed(2)}</span>
+                <span className="text-xs text-text-muted">
+                  {booking.seats.length} {booking.seats.length === 1 ? 'seat' : 'seats'}
+                </span>
+                <span className="ml-2 font-display font-bold text-accent-primary">
+                  ${booking.totalAmount.toFixed(2)}
+                </span>
               </div>
-              <div className="flex gap-2">
+
+              <div className="flex items-center gap-2 flex-wrap">
                 {!isCancelled && !isPast && (
                   <>
                     <Link to={`/ticket/${booking.id}`}>
                       <Button size="sm" variant="outline">View Ticket</Button>
                     </Link>
-                    <Button size="sm" variant="destructive" onClick={() => setCancelTarget(booking)}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setRescheduleTarget(booking);
+                        setSelectedNewShowtime(null);
+                      }}
+                      className="text-xs hover:text-accent-primary"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" /> Reschedule
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => setCancelTarget(booking)}
+                    >
                       <X className="w-3.5 h-3.5" /> Cancel
                     </Button>
                   </>
                 )}
-                {isCancelled && booking.refundStatus === 'pending' && (
-                  <Badge variant="amber"><RotateCcw className="w-3 h-3" /> Refund Processing</Badge>
+
+                {isCancelled && (
+                  <div className="flex items-center gap-1 text-xs text-text-muted">
+                    <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Seats returned to inventory</span>
+                  </div>
                 )}
               </div>
             </div>
@@ -138,59 +358,289 @@ export function MyBookingsPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      <h1 className="text-3xl font-display font-bold mb-2">My Bookings</h1>
-      <p className="text-text-secondary mb-8">Manage your upcoming and past cinema bookings</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-3xl font-display font-bold mb-1">My Bookings</h1>
+          <p className="text-text-secondary text-sm">
+            Manage your movie tickets, cancellation refunds, and showtime rescheduling
+          </p>
+        </div>
 
-      {bookings.length === 0 ? (
+        {/* Tiered Policy Badge */}
+        <div className="p-3 bg-cinema-card hairline rounded-xl flex items-center gap-3">
+          <ShieldCheck className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+          <div className="text-xs">
+            <span className="font-semibold text-text-primary block">Instant Tiered Refund Policy</span>
+            <span className="text-text-muted">&gt;24h: 100% | 6–24h: 50% | &lt;6h: 0%</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Filter Tabs & Search Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-6">
+        <div className="flex gap-1.5 p-1 bg-cinema-card hairline rounded-xl">
+          {(['all', 'upcoming', 'completed', 'cancelled'] as FilterTab[]).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${
+                activeTab === tab
+                  ? 'bg-accent-primary text-black font-semibold shadow'
+                  : 'text-text-secondary hover:text-white'
+              }`}
+            >
+              {tab === 'cancelled' ? 'Cancelled & Refunded' : tab}
+            </button>
+          ))}
+        </div>
+
+        <div className="relative w-full sm:w-64">
+          <Search className="w-4 h-4 text-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
+          <Input
+            placeholder="Search movie or booking ID..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="pl-9 text-xs h-9"
+          />
+        </div>
+      </div>
+
+      {filteredBookings.length === 0 ? (
         <Card className="p-12 text-center">
           <Ticket className="w-12 h-12 text-text-muted mx-auto mb-4" />
-          <h3 className="text-lg font-medium mb-2">No bookings yet</h3>
-          <p className="text-sm text-text-muted mb-6">Browse movies and book your first ticket!</p>
+          <h3 className="text-lg font-medium mb-2">No bookings found</h3>
+          <p className="text-sm text-text-muted mb-6">
+            {searchQuery ? 'No results matched your search criteria.' : 'Browse movies and book your tickets!'}
+          </p>
           <Link to="/movies"><Button>Browse Movies</Button></Link>
         </Card>
       ) : (
-        <div className="space-y-8">
-          {upcoming.length > 0 && (
-            <section>
-              <h2 className="text-xl font-display font-semibold mb-4">Upcoming</h2>
-              <div className="space-y-4">{upcoming.map(renderBookingCard)}</div>
-            </section>
-          )}
-          {past.length > 0 && (
-            <section>
-              <h2 className="text-xl font-display font-semibold mb-4">History</h2>
-              <div className="space-y-4">{past.map(renderBookingCard)}</div>
-            </section>
-          )}
+        <div className="space-y-4">
+          {filteredBookings.map(renderBookingCard)}
         </div>
       )}
 
+      {/* Cancellation & Tiered Refund Modal */}
       <Modal
         open={!!cancelTarget}
         onClose={() => setCancelTarget(null)}
-        title="Cancel Booking?"
-        size="sm"
+        title="Confirm Booking Cancellation"
+        size="md"
         footer={
           <>
             <Button variant="ghost" onClick={() => setCancelTarget(null)}>Keep Booking</Button>
-            <Button variant="destructive" onClick={confirmCancel}>Yes, Cancel & Refund</Button>
+            <Button variant="destructive" onClick={confirmCancel}>
+              {cancelTarget && calculateRefund(cancelTarget).refundAmount > 0
+                ? `Confirm Cancellation & Refund ($${calculateRefund(cancelTarget).refundAmount.toFixed(2)})`
+                : 'Confirm Cancellation (No Refund)'}
+            </Button>
           </>
         }
       >
-        <div className="flex gap-4">
-          <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-accent-destructive/10 flex items-center justify-center">
-            <AlertCircle className="w-6 h-6 text-accent-destructive" />
+        {cancelTarget && (() => {
+          const calc = calculateRefund(cancelTarget);
+          return (
+            <div className="space-y-5">
+              <div className="flex gap-3 items-start p-3.5 bg-cinema-base hairline rounded-xl">
+                <img
+                  src={cancelTarget.moviePoster}
+                  alt={cancelTarget.movieTitle}
+                  className="w-14 h-20 rounded-lg object-cover"
+                />
+                <div className="text-xs space-y-1">
+                  <h4 className="font-semibold text-sm text-text-primary">{cancelTarget.movieTitle}</h4>
+                  <p className="text-text-muted">{cancelTarget.branchName} • {cancelTarget.hallName}</p>
+                  <p className="text-text-secondary">
+                    {cancelTarget.date} at {cancelTarget.time} • {cancelTarget.seats.join(', ')} ({cancelTarget.seats.length} seats)
+                  </p>
+                  <p className="text-accent-primary font-semibold">Total Paid: ${cancelTarget.totalAmount.toFixed(2)}</p>
+                </div>
+              </div>
+
+              {/* Tiered Policy Visual Matrix */}
+              <div>
+                <h5 className="text-xs font-semibold text-text-primary mb-2 flex items-center gap-1.5">
+                  <Info className="w-4 h-4 text-accent-primary" /> Cinema Refund Policy Tiers:
+                </h5>
+                <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                  <div
+                    className={`p-2.5 rounded-lg border ${
+                      calc.tier === 'full'
+                        ? 'border-emerald-500 bg-emerald-500/10 text-emerald-300 font-bold'
+                        : 'border-white/10 bg-white/[0.02] text-text-muted'
+                    }`}
+                  >
+                    <p className="font-semibold">&gt;24h Before</p>
+                    <p className="text-[11px] mt-0.5">100% Refund</p>
+                    {calc.tier === 'full' && <span className="text-[10px] text-emerald-400 block mt-1 font-mono">ACTIVE TIER</span>}
+                  </div>
+
+                  <div
+                    className={`p-2.5 rounded-lg border ${
+                      calc.tier === 'partial'
+                        ? 'border-amber-500 bg-amber-500/10 text-amber-300 font-bold'
+                        : 'border-white/10 bg-white/[0.02] text-text-muted'
+                    }`}
+                  >
+                    <p className="font-semibold">6h - 24h Before</p>
+                    <p className="text-[11px] mt-0.5">50% Refund</p>
+                    {calc.tier === 'partial' && <span className="text-[10px] text-amber-400 block mt-1 font-mono">ACTIVE TIER</span>}
+                  </div>
+
+                  <div
+                    className={`p-2.5 rounded-lg border ${
+                      calc.tier === 'none'
+                        ? 'border-rose-500 bg-rose-500/10 text-rose-300 font-bold'
+                        : 'border-white/10 bg-white/[0.02] text-text-muted'
+                    }`}
+                  >
+                    <p className="font-semibold">&lt;6h Before</p>
+                    <p className="text-[11px] mt-0.5">Non-Refundable</p>
+                    {calc.tier === 'none' && <span className="text-[10px] text-rose-400 block mt-1 font-mono">ACTIVE TIER</span>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Financial Calculation Breakdown */}
+              <div className="p-3.5 bg-cinema-base rounded-xl hairline text-xs space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-text-muted">Hours Until Showtime:</span>
+                  <span className="font-mono text-text-primary">{calc.hoursRemaining.toFixed(1)} hours remaining</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-text-muted">Eligible Tier:</span>
+                  <span className="font-semibold text-text-primary">{calc.label}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-text-muted">Original Payment:</span>
+                  <span>${cancelTarget.totalAmount.toFixed(2)}</span>
+                </div>
+                {calc.cancellationFee > 0 && (
+                  <div className="flex justify-between text-rose-400">
+                    <span>Cancellation Fee:</span>
+                    <span>-${calc.cancellationFee.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between pt-2 border-t border-white/5 font-semibold text-sm">
+                  <span className="text-text-primary">Net Refund Amount:</span>
+                  <span className="text-emerald-400 font-mono">${calc.refundAmount.toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg bg-accent-primary/10 border border-accent-primary/20 text-xs text-text-secondary flex items-start gap-2">
+                <RotateCcw className="w-4 h-4 text-accent-primary flex-shrink-0 mt-0.5" />
+                <p>
+                  Upon cancellation, seats <span className="font-mono font-bold text-accent-primary">{cancelTarget.seats.join(', ')}</span> will immediately be released back into the hall inventory for other guests.
+                </p>
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
+
+      {/* Reschedule Showtime Modal */}
+      <Modal
+        open={!!rescheduleTarget}
+        onClose={() => {
+          setRescheduleTarget(null);
+          setSelectedNewShowtime(null);
+        }}
+        title="Reschedule Showtime"
+        size="md"
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setRescheduleTarget(null);
+                setSelectedNewShowtime(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmReschedule}
+              disabled={!selectedNewShowtime}
+            >
+              Confirm Reschedule
+            </Button>
+          </>
+        }
+      >
+        {rescheduleTarget && (
+          <div className="space-y-5">
+            <div className="p-3 bg-cinema-base hairline rounded-xl text-xs space-y-1">
+              <span className="text-text-muted block">Current Showtime:</span>
+              <p className="font-semibold text-text-primary">
+                {rescheduleTarget.movieTitle} • {rescheduleTarget.branchName}
+              </p>
+              <p className="text-accent-primary font-mono">
+                {rescheduleTarget.date} at {rescheduleTarget.time} ({rescheduleTarget.hallName})
+              </p>
+              <p className="text-text-secondary">Seats: {rescheduleTarget.seats.join(', ')}</p>
+            </div>
+
+            <div>
+              <h4 className="text-xs font-semibold text-text-primary mb-2 flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-accent-primary" /> Select an Alternate Showtime Slot:
+              </h4>
+
+              {availableAlternateShowtimes.length === 0 ? (
+                <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 text-center text-xs text-text-muted">
+                  No alternate showtimes currently available for this movie at {rescheduleTarget.branchName}.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {availableAlternateShowtimes.map(st => {
+                    const hall = getHall(st.branchId, st.hallId);
+                    const isSelected = selectedNewShowtime?.id === st.id;
+                    return (
+                      <div
+                        key={st.id}
+                        onClick={() => setSelectedNewShowtime(st)}
+                        className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                          isSelected
+                            ? 'border-accent-primary bg-accent-primary/10 shadow-sm'
+                            : 'border-white/10 hover:border-white/20 bg-cinema-card'
+                        }`}
+                      >
+                        <div className="text-xs space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-text-primary">
+                              {new Date(st.date).toLocaleDateString('en-US', {
+                                weekday: 'short',
+                                month: 'short',
+                                day: 'numeric',
+                              })}
+                            </span>
+                            <span className="font-mono text-accent-primary font-bold">{st.time}</span>
+                          </div>
+                          <p className="text-text-muted">{hall ? hall.name : st.hallId}</p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Badge variant="default" className="text-[11px] font-mono">
+                            ${st.basePrice}
+                          </Badge>
+                          {isSelected && <CheckCircle2 className="w-4 h-4 text-accent-primary" />}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {selectedNewShowtime && (
+              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <span>
+                  Booking will be moved to {selectedNewShowtime.date} at {selectedNewShowtime.time} without any additional fees.
+                </span>
+              </div>
+            )}
           </div>
-          <div>
-            <p className="text-sm text-text-secondary mb-2">
-              You're about to cancel your booking for <span className="font-medium text-text-primary">{cancelTarget?.movieTitle}</span> on{' '}
-              {cancelTarget && new Date(cancelTarget.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at {cancelTarget?.time}.
-            </p>
-            <p className="text-sm text-text-secondary">
-              A refund of <span className="font-medium text-accent-primary">${cancelTarget?.totalAmount.toFixed(2)}</span> will be processed to your original payment method.
-            </p>
-          </div>
-        </div>
+        )}
       </Modal>
     </div>
   );

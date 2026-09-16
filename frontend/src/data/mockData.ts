@@ -1,4 +1,4 @@
-import type { Movie, Branch, Showtime, Booking, User, Notification, NotificationTemplate } from '@/types';
+import type { Movie, Branch, Showtime, Booking, User, Notification, NotificationTemplate, MovieReview, Promotion } from '@/types';
 
 export const mockMovies: Movie[] = [
   {
@@ -466,3 +466,70 @@ export const mockNotificationTemplates: NotificationTemplate[] = [
     message: '{{hall}}, {{time}} show is {{percent}}% booked. Only {{remaining}} seats remaining.',
   },
 ];
+
+export const mockMovieReviews: MovieReview[] = [
+  {
+    id: 'rev1',
+    movieId: 'm1',
+    userId: 'u1',
+    userName: 'John Doe',
+    rating: 5,
+    comment: 'An absolute masterpiece of cinema. The visual fidelity, Hans Zimmer score, and Denis Villeneuve direction are perfection.',
+    createdAt: '2026-03-05',
+    status: 'approved',
+  },
+  {
+    id: 'rev2',
+    movieId: 'm1',
+    userId: 'u2',
+    userName: 'Sarah Jenkins',
+    rating: 4,
+    comment: 'Incredible IMAX scale and performances. The sandworm ride sequences were breathtaking in IMAX 3D.',
+    createdAt: '2026-03-08',
+    status: 'approved',
+  },
+  {
+    id: 'rev3',
+    movieId: 'm2',
+    userId: 'u1',
+    userName: 'John Doe',
+    rating: 5,
+    comment: 'Cillian Murphy gives the performance of a lifetime. The sound design in the Trinity test scene was hauntingly brilliant.',
+    createdAt: '2026-02-20',
+    status: 'approved',
+  },
+];
+
+export const mockPromotions: Promotion[] = [
+  {
+    id: 'p1',
+    code: 'CINE20',
+    description: '20% off all ticket bookings over $30',
+    discountType: 'percentage',
+    discountValue: 20,
+    minSpend: 30,
+    validUntil: '2026-12-31',
+    active: true,
+  },
+  {
+    id: 'p2',
+    code: 'SLIIT5',
+    description: '$5 flat discount for SLIIT Students',
+    discountType: 'flat',
+    discountValue: 5,
+    minSpend: 15,
+    validUntil: '2026-12-31',
+    active: true,
+  },
+  {
+    id: 'p3',
+    code: 'WEEKEND10',
+    description: '10% discount on weekend family passes',
+    discountType: 'percentage',
+    discountValue: 10,
+    minSpend: 40,
+    validUntil: '2026-10-31',
+    active: true,
+  },
+];
+

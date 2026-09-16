@@ -1,5 +1,5 @@
-import { mockMovies, mockBranches, mockShowtimes, mockBookings, mockUsers, mockAdminUsers, mockNotifications, mockNotificationTemplates } from '@/data/mockData';
-import type { Movie, Branch, Showtime, Booking, User, Role, Notification, NotificationTemplate, NotificationPreferences } from '@/types';
+import { mockMovies, mockBranches, mockShowtimes, mockBookings, mockUsers, mockAdminUsers, mockNotifications, mockNotificationTemplates, mockMovieReviews, mockPromotions } from '@/data/mockData';
+import type { Movie, Branch, Showtime, Booking, User, Role, Notification, NotificationTemplate, NotificationPreferences, MovieReview, Promotion } from '@/types';
 import { movieApi } from '@/api/movieApi';
 import { branchApi } from '@/api/branchApi';
 import { showtimeApi } from '@/api/showtimeApi';
@@ -16,6 +16,8 @@ const KEYS = {
   notifications: 'cinebook_notifications',
   notificationTemplates: 'cinebook_notification_templates',
   notificationPrefs: 'cinebook_notification_prefs',
+  reviews: 'cinebook_reviews',
+  promotions: 'cinebook_promotions',
 };
 
 export function seedData(): void {
@@ -27,8 +29,11 @@ export function seedData(): void {
   localStorage.setItem(KEYS.users, JSON.stringify(mockAdminUsers));
   localStorage.setItem(KEYS.notifications, JSON.stringify(mockNotifications));
   localStorage.setItem(KEYS.notificationTemplates, JSON.stringify(mockNotificationTemplates));
+  localStorage.setItem(KEYS.reviews, JSON.stringify(mockMovieReviews));
+  localStorage.setItem(KEYS.promotions, JSON.stringify(mockPromotions));
   localStorage.setItem(KEYS.seeded, 'true');
 }
+
 
 export async function syncFromBackend(): Promise<void> {
   try {
@@ -162,48 +167,69 @@ export function getShowtime(id: string): Showtime | undefined {
   return getShowtimes().find(s => s.id === id);
 }
 
-export function saveShowtime(showtime: Showtime): void {
+export async function saveShowtime(showtime: Showtime): Promise<Showtime> {
   const showtimes = getShowtimes();
   const idx = showtimes.findIndex(s => s.id === showtime.id);
   if (idx >= 0) {
     showtimes[idx] = showtime;
-    showtimeApi.updateShowtime(showtime.id, showtime).catch(err =>
-      console.warn('API updateShowtime sync failed, changes kept locally:', err)
-    );
+    write(KEYS.showtimes, showtimes);
+    try {
+      return await showtimeApi.updateShowtime(showtime.id, showtime);
+    } catch (err) {
+      console.warn('API updateShowtime sync failed, changes kept locally:', err);
+      return showtime;
+    }
   } else {
     const localId = showtime.id || `s${Date.now()}`;
     const toSave = { ...showtime, id: localId };
     showtimes.push(toSave);
-    showtimeApi.createShowtime(showtime).then(created => {
+    write(KEYS.showtimes, showtimes);
+    try {
+      const created = await showtimeApi.createShowtime(showtime);
       if (created.id && created.id !== localId) {
         const current = getShowtimes();
         const item = current.find(s => s.id === localId);
         if (item) item.id = created.id;
         write(KEYS.showtimes, current);
       }
-    }).catch(err =>
-      console.warn('API createShowtime sync failed, changes kept locally:', err)
-    );
+      return created;
+    } catch (err) {
+      console.warn('API createShowtime sync failed, changes kept locally:', err);
+      return toSave;
+    }
   }
-  write(KEYS.showtimes, showtimes);
 }
 
-export function deleteShowtime(id: string): void {
+export async function deleteShowtime(id: string): Promise<void> {
   write(KEYS.showtimes, getShowtimes().filter(s => s.id !== id));
-  showtimeApi.deleteShowtime(id).catch(err =>
-    console.warn('API deleteShowtime sync failed, deletion kept locally:', err)
-  );
+  try {
+    await showtimeApi.deleteShowtime(id);
+  } catch (err) {
+    console.warn('API deleteShowtime sync failed, deletion kept locally:', err);
+  }
 }
 
-export function updateShowtimeSeats(showtimeId: string, seats: string[]): void {
+export async function updateShowtimeSeats(showtimeId: string, seats: string[]): Promise<void> {
   const showtimes = getShowtimes();
   const idx = showtimes.findIndex(s => s.id === showtimeId);
   if (idx >= 0) {
     showtimes[idx].bookedSeats = [...showtimes[idx].bookedSeats, ...seats];
     write(KEYS.showtimes, showtimes);
-    showtimeApi.addBookedSeats(showtimeId, seats).catch(err =>
-      console.warn('API addBookedSeats sync failed, changes kept locally:', err)
-    );
+    try {
+      await showtimeApi.addBookedSeats(showtimeId, seats);
+    } catch (err) {
+      console.warn('API addBookedSeats sync failed, changes kept locally:', err);
+    }
+  }
+}
+
+export async function releaseShowtimeSeats(showtimeId: string, seats: string[]): Promise<void> {
+  const showtimes = getShowtimes();
+  const idx = showtimes.findIndex(s => s.id === showtimeId);
+  if (idx >= 0) {
+    const seatSet = new Set(seats);
+    showtimes[idx].bookedSeats = showtimes[idx].bookedSeats.filter(s => !seatSet.has(s));
+    write(KEYS.showtimes, showtimes);
   }
 }
 
@@ -243,6 +269,46 @@ export function updateBooking(id: string, updates: Partial<Booking>): void {
         console.warn('API cancelBooking sync failed, kept locally:', err)
       );
     }
+  }
+}
+
+export function cancelBookingWithRefund(id: string, refundAmount: number): void {
+  const bookings = getBookings();
+  const target = bookings.find(b => b.id === id);
+  if (target) {
+    // Release seats back to showtime inventory
+    releaseShowtimeSeats(target.showtimeId, target.seats);
+
+    updateBooking(id, {
+      status: 'cancelled',
+      refundStatus: refundAmount > 0 ? 'processed' : 'none',
+      refundAmount: refundAmount,
+    });
+  }
+}
+
+export function rescheduleBooking(
+  id: string,
+  newShowtimeId: string,
+  newDate: string,
+  newTime: string,
+  newHallName: string
+): void {
+  const bookings = getBookings();
+  const target = bookings.find(b => b.id === id);
+  if (target) {
+    // Release seats from old showtime
+    releaseShowtimeSeats(target.showtimeId, target.seats);
+    // Reserve seats in new showtime
+    updateShowtimeSeats(newShowtimeId, target.seats);
+
+    updateBooking(id, {
+      showtimeId: newShowtimeId,
+      date: newDate,
+      time: newTime,
+      hallName: newHallName,
+      rescheduledFrom: `${target.date} ${target.time}`,
+    });
   }
 }
 
@@ -396,3 +462,81 @@ export function getAllSentNotifications(): Notification[] {
     .filter(n => n.audience)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
+
+// Movie Reviews
+export function getReviews(): MovieReview[] {
+  const list = read<MovieReview>(KEYS.reviews);
+  return list.length > 0 ? list : mockMovieReviews;
+}
+
+export function getMovieReviews(movieId: string): MovieReview[] {
+  return getReviews().filter(r => r.movieId === movieId && r.status === 'approved');
+}
+
+export function getAllReviewsForModeration(): MovieReview[] {
+  return getReviews();
+}
+
+export function saveReview(review: MovieReview): void {
+  const reviews = getReviews();
+  const idx = reviews.findIndex(r => r.id === review.id);
+  if (idx >= 0) {
+    reviews[idx] = review;
+  } else {
+    reviews.unshift(review);
+  }
+  write(KEYS.reviews, reviews);
+}
+
+export function updateReviewStatus(reviewId: string, status: 'approved' | 'rejected'): void {
+  const reviews = getReviews();
+  const idx = reviews.findIndex(r => r.id === reviewId);
+  if (idx >= 0) {
+    reviews[idx].status = status;
+    write(KEYS.reviews, reviews);
+  }
+}
+
+// Promotions & Discounts
+export function getPromotions(): Promotion[] {
+  const list = read<Promotion>(KEYS.promotions);
+  return list.length > 0 ? list : mockPromotions;
+}
+
+export function savePromotion(promo: Promotion): void {
+  const promos = getPromotions();
+  const idx = promos.findIndex(p => p.id === promo.id);
+  if (idx >= 0) {
+    promos[idx] = promo;
+  } else {
+    promos.push(promo);
+  }
+  write(KEYS.promotions, promos);
+}
+
+export function deletePromotion(id: string): void {
+  write(KEYS.promotions, getPromotions().filter(p => p.id !== id));
+}
+
+export function validatePromoCode(code: string, subtotal: number): { valid: boolean; discount: number; message: string; promo?: Promotion } {
+  const cleanCode = code.trim().toUpperCase();
+  const promo = getPromotions().find(p => p.code.toUpperCase() === cleanCode && p.active);
+  if (!promo) {
+    return { valid: false, discount: 0, message: 'Invalid promo code' };
+  }
+  if (new Date(promo.validUntil) < new Date(new Date().toDateString())) {
+    return { valid: false, discount: 0, message: 'Promo code has expired' };
+  }
+  if (subtotal < promo.minSpend) {
+    return { valid: false, discount: 0, message: `Minimum spend of $${promo.minSpend.toFixed(2)} required` };
+  }
+  let discount = 0;
+  if (promo.discountType === 'percentage') {
+    discount = (subtotal * promo.discountValue) / 100;
+  } else {
+    discount = promo.discountValue;
+  }
+  discount = Math.min(discount, subtotal);
+  return { valid: true, discount, message: `Applied ${promo.description}`, promo };
+}
+

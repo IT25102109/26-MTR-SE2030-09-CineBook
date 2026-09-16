@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { ChevronLeft, Lock, CreditCard, Ticket } from 'lucide-react';
-import { getShowtime, getMovie, getBranch, getHall, saveBooking, saveNotification, getUsers } from '@/data/store';
+import { ChevronLeft, Lock, CreditCard, Ticket, Smartphone, Building2, QrCode, Tag, Check, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { getShowtime, getMovie, getBranch, getHall, saveBooking, saveNotification, getUsers, validatePromoCode } from '@/data/store';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
+import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useNotifications } from '@/contexts/NotificationContext';
-import type { Booking } from '@/types';
+import type { Booking, Promotion } from '@/types';
 
 interface CheckoutState {
   showtimeId: string;
@@ -32,11 +33,26 @@ export function CheckoutPage() {
   const branch = showtime ? getBranch(showtime.branchId) : undefined;
   const hall = showtime ? getHall(showtime.branchId, showtime.hallId) : undefined;
 
+  const [paymentMethod, setPaymentMethod] = useState<'card' | 'wallet' | 'transfer'>('card');
   const [processing, setProcessing] = useState(false);
+
+  // Card fields
   const [cardName, setCardName] = useState(user?.name || '');
   const [cardNumber, setCardNumber] = useState('');
   const [expiry, setExpiry] = useState('');
   const [cvv, setCvv] = useState('');
+
+  // Mobile wallet fields
+  const [walletApp, setWalletApp] = useState<'genie' | 'frimi'>('genie');
+  const [walletPhone, setWalletPhone] = useState('0771234567');
+
+  // Bank transfer fields
+  const [bankRef, setBankRef] = useState('');
+
+  // Promo code state
+  const [promoCodeInput, setPromoCodeInput] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState<Promotion | null>(null);
+  const [discountAmount, setDiscountAmount] = useState(0);
 
   if (!state || !showtime || !movie || !branch || !hall) {
     return (
@@ -50,7 +66,8 @@ export function CheckoutPage() {
   const subtotal = state.totalAmount;
   const bookingFee = state.seats.length * 1.50;
   const tax = (subtotal + bookingFee) * 0.08;
-  const total = subtotal + bookingFee + tax;
+  const grossTotal = subtotal + bookingFee + tax;
+  const finalTotal = Math.max(0, grossTotal - discountAmount);
 
   const formatCardNumber = (val: string) => {
     const digits = val.replace(/\D/g, '').slice(0, 16);
@@ -63,15 +80,45 @@ export function CheckoutPage() {
     return digits;
   };
 
+  const handleApplyPromo = () => {
+    if (!promoCodeInput.trim()) {
+      toast('error', 'Enter a promotional code');
+      return;
+    }
+    const res = validatePromoCode(promoCodeInput, subtotal);
+    if (!res.valid) {
+      toast('error', res.message);
+      return;
+    }
+    setAppliedPromo(res.promo || null);
+    setDiscountAmount(res.discount);
+    toast('success', `${res.message} (-$${res.discount.toFixed(2)})`);
+  };
+
+  const handleRemovePromo = () => {
+    setAppliedPromo(null);
+    setDiscountAmount(0);
+    setPromoCodeInput('');
+    toast('info', 'Promo code removed');
+  };
+
   const handlePay = () => {
-    if (!cardName.trim() || !cardNumber.trim() || !expiry.trim() || !cvv.trim()) {
-      toast('error', 'Please fill in all payment fields');
-      return;
+    if (paymentMethod === 'card') {
+      if (!cardName.trim() || !cardNumber.trim() || !expiry.trim() || !cvv.trim()) {
+        toast('error', 'Please fill in all credit/debit card fields');
+        return;
+      }
+      if (cardNumber.replace(/\s/g, '').length < 16) {
+        toast('error', 'Please enter a valid 16-digit card number');
+        return;
+      }
+    } else if (paymentMethod === 'transfer') {
+      if (!bankRef.trim()) {
+        toast('error', 'Please provide a transfer reference number or slip ID');
+        return;
+      }
     }
-    if (cardNumber.replace(/\s/g, '').length < 16) {
-      toast('error', 'Please enter a valid card number');
-      return;
-    }
+
     if (!user) {
       toast('info', 'Please sign in to complete booking');
       return;
@@ -93,7 +140,7 @@ export function CheckoutPage() {
         date: showtime.date,
         time: showtime.time,
         seats: state.seats,
-        totalAmount: total,
+        totalAmount: finalTotal,
         status: 'confirmed',
         refundStatus: 'none',
         bookingDate: new Date().toISOString().split('T')[0],
@@ -101,12 +148,12 @@ export function CheckoutPage() {
 
       saveBooking(booking);
       setProcessing(false);
-      toast('success', 'Booking confirmed! Your e-ticket is ready.');
+      toast('success', 'Payment successful! E-Ticket issued.');
 
       addNotification({
         type: 'booking_confirmation',
         title: 'Booking Confirmed',
-        message: `Your booking for ${movie.title} at ${branch.name} has been confirmed. ${state.seats.length} seats: ${state.seats.sort().join(', ')}.`,
+        message: `Your booking for ${movie.title} at ${branch.name} has been confirmed. ${state.seats.length} seats: ${state.seats.sort().join(', ')}. Total Paid: $${finalTotal.toFixed(2)}`,
         link: `/ticket/${booking.id}`,
       });
 
@@ -130,6 +177,7 @@ export function CheckoutPage() {
     }, 1800);
   };
 
+
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <Link to={`/booking/${showtime.id}`} className="inline-flex items-center gap-1 text-sm text-text-secondary hover:text-accent-primary transition-colors mb-6">
@@ -141,46 +189,180 @@ export function CheckoutPage() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Payment form */}
         <div className="lg:col-span-3 space-y-6">
+          {/* Payment Method Selector */}
+          <div className="flex gap-2 p-1.5 bg-cinema-card hairline rounded-xl">
+            <button
+              type="button"
+              onClick={() => setPaymentMethod('card')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-medium transition-all ${
+                paymentMethod === 'card'
+                  ? 'bg-accent-primary text-black font-semibold shadow-md'
+                  : 'text-text-secondary hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <CreditCard className="w-4 h-4" /> Credit/Debit Card
+            </button>
+            <button
+              type="button"
+              onClick={() => setPaymentMethod('wallet')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-medium transition-all ${
+                paymentMethod === 'wallet'
+                  ? 'bg-accent-primary text-black font-semibold shadow-md'
+                  : 'text-text-secondary hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Smartphone className="w-4 h-4" /> Mobile Wallet
+            </button>
+            <button
+              type="button"
+              onClick={() => setPaymentMethod('transfer')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-medium transition-all ${
+                paymentMethod === 'transfer'
+                  ? 'bg-accent-primary text-black font-semibold shadow-md'
+                  : 'text-text-secondary hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Building2 className="w-4 h-4" /> Bank Transfer
+            </button>
+          </div>
+
           <Card className="p-6">
-            <div className="flex items-center gap-2 mb-5">
-              <CreditCard className="w-5 h-5 text-accent-primary" />
-              <h2 className="font-display font-semibold text-lg">Payment Details</h2>
-            </div>
+            {paymentMethod === 'card' && (
+              <div>
+                <div className="flex items-center gap-2 mb-5">
+                  <CreditCard className="w-5 h-5 text-accent-primary" />
+                  <h2 className="font-display font-semibold text-lg">Card Details</h2>
+                </div>
 
-            <div className="space-y-4">
-              <Input
-                label="Name on Card"
-                placeholder="John Doe"
-                value={cardName}
-                onChange={e => setCardName(e.target.value)}
-              />
-              <Input
-                label="Card Number"
-                placeholder="4242 4242 4242 4242"
-                value={cardNumber}
-                onChange={e => setCardNumber(formatCardNumber(e.target.value))}
-              />
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="Expiry Date"
-                  placeholder="MM/YY"
-                  value={expiry}
-                  onChange={e => setExpiry(formatExpiry(e.target.value))}
-                />
-                <Input
-                  label="CVV"
-                  placeholder="123"
-                  value={cvv}
-                  onChange={e => setCvv(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                  type="password"
-                />
+                <div className="space-y-4">
+                  <Input
+                    label="Name on Card"
+                    placeholder="John Doe"
+                    value={cardName}
+                    onChange={e => setCardName(e.target.value)}
+                  />
+                  <Input
+                    label="Card Number"
+                    placeholder="4242 4242 4242 4242"
+                    value={cardNumber}
+                    onChange={e => setCardNumber(formatCardNumber(e.target.value))}
+                  />
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input
+                      label="Expiry Date"
+                      placeholder="MM/YY"
+                      value={expiry}
+                      onChange={e => setExpiry(formatExpiry(e.target.value))}
+                    />
+                    <Input
+                      label="CVV"
+                      placeholder="123"
+                      value={cvv}
+                      onChange={e => setCvv(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                      type="password"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 mt-5 pt-5 border-t border-white/5">
+                  <Lock className="w-4 h-4 text-emerald-400" />
+                  <p className="text-xs text-text-muted">256-bit encrypted checkout. Instant e-ticket generation.</p>
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className="flex items-center gap-2 mt-5 pt-5 border-t border-white/5">
-              <Lock className="w-4 h-4 text-emerald-400" />
-              <p className="text-xs text-text-muted">This is a mock payment — no real transaction will occur. Use any card details.</p>
-            </div>
+            {paymentMethod === 'wallet' && (
+              <div>
+                <div className="flex items-center gap-2 mb-5">
+                  <Smartphone className="w-5 h-5 text-accent-primary" />
+                  <h2 className="font-display font-semibold text-lg">Mobile Wallet (Genie / FriMi)</h2>
+                </div>
+
+                <div className="flex gap-3 mb-5">
+                  <button
+                    type="button"
+                    onClick={() => setWalletApp('genie')}
+                    className={`flex-1 p-3 rounded-lg border text-center transition-all ${
+                      walletApp === 'genie'
+                        ? 'border-accent-primary bg-accent-primary/10 text-accent-primary font-semibold'
+                        : 'border-white/10 text-text-secondary hover:border-white/20'
+                    }`}
+                  >
+                    Dialog Genie
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWalletApp('frimi')}
+                    className={`flex-1 p-3 rounded-lg border text-center transition-all ${
+                      walletApp === 'frimi'
+                        ? 'border-accent-primary bg-accent-primary/10 text-accent-primary font-semibold'
+                        : 'border-white/10 text-text-secondary hover:border-white/20'
+                    }`}
+                  >
+                    Nations FriMi
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <Input
+                    label="Mobile Number"
+                    placeholder="0771234567"
+                    value={walletPhone}
+                    onChange={e => setWalletPhone(e.target.value)}
+                  />
+
+                  <div className="p-4 bg-cinema-base rounded-xl hairline flex items-center gap-4">
+                    <div className="w-20 h-20 bg-white rounded-lg p-1.5 flex items-center justify-center flex-shrink-0">
+                      <QrCode className="w-full h-full text-black" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold text-text-primary">Instant QR Payment</h4>
+                      <p className="text-xs text-text-muted mt-1">
+                        Scan with your {walletApp === 'genie' ? 'Genie' : 'FriMi'} App or authorize the push notification on your device.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {paymentMethod === 'transfer' && (
+              <div>
+                <div className="flex items-center gap-2 mb-5">
+                  <Building2 className="w-5 h-5 text-accent-primary" />
+                  <h2 className="font-display font-semibold text-lg">Direct Bank Transfer</h2>
+                </div>
+
+                <div className="p-4 rounded-xl bg-cinema-base hairline space-y-2 mb-4 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-text-muted">Bank:</span>
+                    <span className="font-medium text-text-primary">Commercial Bank of Ceylon</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-text-muted">Account Name:</span>
+                    <span className="font-medium text-text-primary">CineBook Holdings PLC</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-text-muted">Account Number:</span>
+                    <span className="font-mono font-semibold text-accent-primary">1000 4829 3920</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-text-muted">Branch:</span>
+                    <span className="font-medium text-text-primary">Colombo City Centre</span>
+                  </div>
+                </div>
+
+                <Input
+                  label="Transfer Reference / Receipt Number"
+                  placeholder="e.g. TRF-98234812"
+                  value={bankRef}
+                  onChange={e => setBankRef(e.target.value)}
+                />
+                <p className="text-xs text-text-muted mt-2">
+                  Please enter the online banking transaction reference or bank slip code.
+                </p>
+              </div>
+            )}
           </Card>
         </div>
 
@@ -210,6 +392,41 @@ export function CheckoutPage() {
               ))}
             </div>
 
+            {/* Promo Code Input */}
+            <div className="mb-5 pb-5 border-b border-white/5">
+              <label className="text-xs text-text-muted font-medium block mb-1.5">Have a Promo Code?</label>
+              {appliedPromo ? (
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                  <div className="flex items-center gap-2">
+                    <Tag className="w-4 h-4 text-emerald-400" />
+                    <div>
+                      <span className="text-xs font-mono font-bold text-emerald-400">{appliedPromo.code}</span>
+                      <span className="text-xs text-emerald-300 ml-2">(-${discountAmount.toFixed(2)})</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemovePromo}
+                    className="text-xs text-text-muted hover:text-rose-400 transition-colors"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Enter code (e.g. MOVIE20)"
+                    value={promoCodeInput}
+                    onChange={e => setPromoCodeInput(e.target.value.toUpperCase())}
+                    className="uppercase font-mono text-xs"
+                  />
+                  <Button size="sm" variant="outline" onClick={handleApplyPromo}>
+                    Apply
+                  </Button>
+                </div>
+              )}
+            </div>
+
             <div className="space-y-2.5 text-sm pb-5 border-b border-white/5">
               <div className="flex justify-between">
                 <span className="text-text-secondary">Subtotal ({state.seats.length} seats)</span>
@@ -223,22 +440,28 @@ export function CheckoutPage() {
                 <span className="text-text-secondary">Tax (8%)</span>
                 <span>${tax.toFixed(2)}</span>
               </div>
+              {discountAmount > 0 && (
+                <div className="flex justify-between text-emerald-400 font-medium">
+                  <span>Promotion Discount</span>
+                  <span>-${discountAmount.toFixed(2)}</span>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-between items-center py-4">
               <span className="font-medium">Total</span>
-              <span className="text-2xl font-display font-bold text-accent-primary">${total.toFixed(2)}</span>
+              <span className="text-2xl font-display font-bold text-accent-primary">${finalTotal.toFixed(2)}</span>
             </div>
 
             <Button fullWidth size="lg" onClick={handlePay} disabled={processing}>
               {processing ? (
                 <>
                   <span className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                  Processing...
+                  Processing Payment...
                 </>
               ) : (
                 <>
-                  <Lock className="w-4 h-4" /> Pay ${total.toFixed(2)}
+                  <Lock className="w-4 h-4" /> Pay ${finalTotal.toFixed(2)}
                 </>
               )}
             </Button>
