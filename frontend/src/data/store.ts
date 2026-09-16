@@ -3,6 +3,7 @@ import type { Movie, Branch, Showtime, Booking, User, Role, Notification, Notifi
 import { movieApi } from '@/api/movieApi';
 import { branchApi } from '@/api/branchApi';
 import { showtimeApi } from '@/api/showtimeApi';
+import { bookingApi } from '@/api/bookingApi';
 
 const KEYS = {
   movies: 'cinebook_movies',
@@ -31,10 +32,11 @@ export function seedData(): void {
 
 export async function syncFromBackend(): Promise<void> {
   try {
-    const [moviesResult, branchesResult, showtimesResult] = await Promise.allSettled([
+    const [moviesResult, branchesResult, showtimesResult, bookingsResult] = await Promise.allSettled([
       movieApi.getMovies(),
       branchApi.getBranches(),
       showtimeApi.getShowtimes(),
+      bookingApi.getBookings(),
     ]);
 
     if (moviesResult.status === 'fulfilled' && moviesResult.value && moviesResult.value.length > 0) {
@@ -45,6 +47,9 @@ export async function syncFromBackend(): Promise<void> {
     }
     if (showtimesResult.status === 'fulfilled' && showtimesResult.value && showtimesResult.value.length > 0) {
       write(KEYS.showtimes, showtimesResult.value);
+    }
+    if (bookingsResult.status === 'fulfilled' && bookingsResult.value && bookingsResult.value.length > 0) {
+      write(KEYS.bookings, bookingsResult.value);
     }
   } catch (err) {
     console.warn('Backend sync failed, using local store data:', err);
@@ -215,6 +220,16 @@ export function saveBooking(booking: Booking): void {
   const bookings = getBookings();
   bookings.push(booking);
   write(KEYS.bookings, bookings);
+  bookingApi.createBooking(booking).then(created => {
+    if (created.id && created.id !== booking.id) {
+      const current = getBookings();
+      const item = current.find(b => b.id === booking.id);
+      if (item) item.id = created.id;
+      write(KEYS.bookings, current);
+    }
+  }).catch(err =>
+    console.warn('API createBooking sync failed, kept locally:', err)
+  );
 }
 
 export function updateBooking(id: string, updates: Partial<Booking>): void {
@@ -223,6 +238,11 @@ export function updateBooking(id: string, updates: Partial<Booking>): void {
   if (idx >= 0) {
     bookings[idx] = { ...bookings[idx], ...updates };
     write(KEYS.bookings, bookings);
+    if (updates.status === 'cancelled') {
+      bookingApi.cancelBooking(id).catch(err =>
+        console.warn('API cancelBooking sync failed, kept locally:', err)
+      );
+    }
   }
 }
 
