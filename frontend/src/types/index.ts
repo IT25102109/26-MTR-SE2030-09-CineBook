@@ -104,7 +104,17 @@ export type NotificationType =
   | 'revenue_milestone'
   | 'user_registration';
 
-export type NotificationAudience = 'all' | 'role' | 'branch';
+export type NotificationAudience = 'all' | 'role' | 'branch' | 'loyaltyTier';
+
+export interface LoyaltyVoucher {
+  id: string;
+  userId: string;
+  code: string;
+  title: string;
+  pointsCost: number;
+  redeemedAt: string;
+  expiresAt: string;
+}
 
 export interface Notification {
   id: string;

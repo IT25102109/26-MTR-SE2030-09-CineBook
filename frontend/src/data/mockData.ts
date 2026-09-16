@@ -270,19 +270,19 @@ export const mockBookings: Booking[] = [
 ];
 
 export const mockUsers: User[] = [
-  { id: 'u1', name: 'Alex Carter', email: 'alex@cinebook.com', role: 'customer', avatarColor: '#F5C518' },
-  { id: 'u2', name: 'Jordan Lee', email: 'jordan@cinebook.com', role: 'cinemaManager', avatarColor: '#E50914' },
+  { id: 'u1', name: 'Alex Carter', email: 'alex@cinebook.com', role: 'customer', avatarColor: '#F5C518', loyaltyPoints: 480, loyaltyTier: 'Silver' },
+  { id: 'u2', name: 'Jordan Lee', email: 'jordan@cinebook.com', role: 'cinemaManager', avatarColor: '#E50914', assignedBranchId: 'b1' },
   { id: 'u3', name: 'Sam Rivera', email: 'sam@cinebook.com', role: 'admin', avatarColor: '#3B82F6' },
 ];
 
 export const mockAdminUsers: User[] = [
-  { id: 'u1', name: 'Alex Carter', email: 'alex@cinebook.com', role: 'customer', avatarColor: '#F5C518' },
-  { id: 'u2', name: 'Jordan Lee', email: 'jordan@cinebook.com', role: 'cinemaManager', avatarColor: '#E50914' },
+  { id: 'u1', name: 'Alex Carter', email: 'alex@cinebook.com', role: 'customer', avatarColor: '#F5C518', loyaltyPoints: 480, loyaltyTier: 'Silver' },
+  { id: 'u2', name: 'Jordan Lee', email: 'jordan@cinebook.com', role: 'cinemaManager', avatarColor: '#E50914', assignedBranchId: 'b1' },
   { id: 'u3', name: 'Sam Rivera', email: 'sam@cinebook.com', role: 'admin', avatarColor: '#3B82F6' },
-  { id: 'u4', name: 'Taylor Swift', email: 'taylor@cinebook.com', role: 'customer', avatarColor: '#10B981' },
-  { id: 'u5', name: 'Morgan Freeman', email: 'morgan@cinebook.com', role: 'customer', avatarColor: '#F97316' },
-  { id: 'u6', name: 'Casey Nguyen', email: 'casey@cinebook.com', role: 'cinemaManager', avatarColor: '#8B5CF6' },
-  { id: 'u7', name: 'Riley Patel', email: 'riley@cinebook.com', role: 'customer', avatarColor: '#EC4899' },
+  { id: 'u4', name: 'Taylor Swift', email: 'taylor@cinebook.com', role: 'customer', avatarColor: '#10B981', loyaltyPoints: 1450, loyaltyTier: 'Platinum' },
+  { id: 'u5', name: 'Morgan Freeman', email: 'morgan@cinebook.com', role: 'customer', avatarColor: '#F97316', loyaltyPoints: 860, loyaltyTier: 'Gold' },
+  { id: 'u6', name: 'Casey Nguyen', email: 'casey@cinebook.com', role: 'cinemaManager', avatarColor: '#8B5CF6', assignedBranchId: 'b2' },
+  { id: 'u7', name: 'Riley Patel', email: 'riley@cinebook.com', role: 'customer', avatarColor: '#EC4899', loyaltyPoints: 120, loyaltyTier: 'Bronze' },
   { id: 'u8', name: 'Jamie Chen', email: 'jamie@cinebook.com', role: 'admin', avatarColor: '#06B6D4' },
 ];
 

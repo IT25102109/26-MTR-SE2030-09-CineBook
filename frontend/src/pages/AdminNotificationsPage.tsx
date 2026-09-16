@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, Send, Edit2, Trash2, Megaphone, FileText, Mail, Users, CheckCheck, Clock, XCircle } from 'lucide-react';
+import { Plus, Send, Edit2, Trash2, Megaphone, FileText, Mail, Users, CheckCheck, Clock, XCircle, Crown, Award } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useNotifications } from '@/contexts/NotificationContext';
@@ -41,6 +41,15 @@ const roleLabels: Record<Role, string> = {
   admin: 'Admins',
 };
 
+const tierTargetLabels: Record<string, string> = {
+  all_vips: 'All VIPs (Silver, Gold & Platinum)',
+  gold_platinum: 'Gold & Platinum VIPs',
+  platinum: 'Platinum Elite Only',
+  gold: 'Gold VIPs',
+  silver: 'Silver Members',
+  bronze: 'Bronze Members',
+};
+
 type Tab = 'broadcasts' | 'compose' | 'templates';
 
 export function AdminNotificationsPage() {
@@ -67,6 +76,7 @@ export function AdminNotificationsPage() {
     audience: 'all' as NotificationAudience,
     targetRole: 'customer' as Role,
     targetBranch: '',
+    targetTier: 'all_vips',
     link: '',
   });
 
@@ -76,6 +86,22 @@ export function AdminNotificationsPage() {
     message: '',
   });
 
+  const estimatedRecipientCount = useMemo(() => {
+    if (compose.audience === 'all') return users.length;
+    if (compose.audience === 'role') return users.filter(u => u.role === compose.targetRole).length;
+    if (compose.audience === 'branch') return users.filter(u => u.role === 'customer').length;
+    if (compose.audience === 'loyaltyTier') {
+      return users.filter(u => {
+        if (u.role !== 'customer') return false;
+        const tier = u.loyaltyTier || 'Bronze';
+        if (compose.targetTier === 'all_vips') return tier === 'Silver' || tier === 'Gold' || tier === 'Platinum';
+        if (compose.targetTier === 'gold_platinum') return tier === 'Gold' || tier === 'Platinum';
+        return tier.toLowerCase() === compose.targetTier.toLowerCase();
+      }).length;
+    }
+    return 0;
+  }, [compose, users]);
+
   const openCompose = () => {
     setCompose({
       title: '',
@@ -84,6 +110,7 @@ export function AdminNotificationsPage() {
       audience: 'all',
       targetRole: 'customer',
       targetBranch: branches[0]?.id || '',
+      targetTier: 'all_vips',
       link: '',
     });
     setComposeOpen(true);
@@ -103,10 +130,18 @@ export function AdminNotificationsPage() {
       targetUserIds = users.filter(u => u.role === compose.targetRole).map(u => u.id);
     } else if (compose.audience === 'branch') {
       targetUserIds = users.filter(u => u.role === 'customer').map(u => u.id);
+    } else if (compose.audience === 'loyaltyTier') {
+      targetUserIds = users.filter(u => {
+        if (u.role !== 'customer') return false;
+        const tier = u.loyaltyTier || 'Bronze';
+        if (compose.targetTier === 'all_vips') return tier === 'Silver' || tier === 'Gold' || tier === 'Platinum';
+        if (compose.targetTier === 'gold_platinum') return tier === 'Gold' || tier === 'Platinum';
+        return tier.toLowerCase() === compose.targetTier.toLowerCase();
+      }).map(u => u.id);
     }
 
     if (targetUserIds.length === 0) {
-      toast('error', 'No users match the selected audience');
+      toast('error', 'No users match the selected audience criteria');
       return;
     }
 
@@ -117,7 +152,14 @@ export function AdminNotificationsPage() {
         message: compose.message,
         link: compose.link || undefined,
         audience: compose.audience,
-        audienceTarget: compose.audience === 'role' ? compose.targetRole : compose.audience === 'branch' ? compose.targetBranch : undefined,
+        audienceTarget:
+          compose.audience === 'role'
+            ? compose.targetRole
+            : compose.audience === 'branch'
+            ? compose.targetBranch
+            : compose.audience === 'loyaltyTier'
+            ? compose.targetTier
+            : undefined,
         createdBy: user.id,
       },
       targetUserIds
@@ -279,7 +321,10 @@ export function AdminNotificationsPage() {
               header: 'Audience',
               render: (n: Notification) => {
                 if (!n.audience) return <span className="text-text-muted">—</span>;
-                const label = n.audience === 'all' ? 'All Users' : n.audience === 'role' ? roleLabels[n.audienceTarget as Role] || 'Role' : branches.find(b => b.id === n.audienceTarget)?.name || 'Branch';
+                if (n.audience === 'all') return <Badge variant="blue">All Users</Badge>;
+                if (n.audience === 'role') return <Badge variant="blue">{roleLabels[n.audienceTarget as Role] || 'Role'}</Badge>;
+                if (n.audience === 'loyaltyTier') return <Badge variant="amber">{tierTargetLabels[n.audienceTarget || ''] || n.audienceTarget || 'Loyalty'}</Badge>;
+                const label = branches.find(b => b.id === n.audienceTarget)?.name || 'Branch';
                 return <Badge variant="blue">{label}</Badge>;
               },
             },
@@ -385,37 +430,60 @@ export function AdminNotificationsPage() {
           />
           <div>
             <label className="text-sm font-medium text-text-secondary mb-2 block">Target Audience</label>
-            <div className="flex gap-2 mb-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
               {([
                 { value: 'all', label: 'All Users', icon: Users },
                 { value: 'role', label: 'By Role', icon: Users },
                 { value: 'branch', label: 'By Branch', icon: Mail },
+                { value: 'loyaltyTier', label: 'By Loyalty Tier', icon: Crown },
               ] as { value: NotificationAudience; label: string; icon: typeof Users }[]).map(aud => (
                 <button
                   key={aud.value}
+                  type="button"
                   onClick={() => setCompose({ ...compose, audience: aud.value })}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm border transition-all ${
+                  className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium border transition-all ${
                     compose.audience === aud.value
                       ? 'bg-accent-primary/10 border-accent-primary/30 text-accent-primary'
                       : 'border-white/10 text-text-secondary hover:text-text-primary hover:bg-white/5'
                   }`}
                 >
-                  <aud.icon className="w-3.5 h-3.5" /> {aud.label}
+                  <aud.icon className="w-3.5 h-3.5 flex-shrink-0" /> {aud.label}
                 </button>
               ))}
             </div>
             {compose.audience === 'role' && (
-              <Select value={compose.targetRole} onChange={e => setCompose({ ...compose, targetRole: e.target.value as Role })}>
+              <Select label="Filter by Role" value={compose.targetRole} onChange={e => setCompose({ ...compose, targetRole: e.target.value as Role })}>
                 <option value="customer">Customers</option>
                 <option value="cinemaManager">Cinema Managers</option>
                 <option value="admin">Admins</option>
               </Select>
             )}
             {compose.audience === 'branch' && (
-              <Select value={compose.targetBranch} onChange={e => setCompose({ ...compose, targetBranch: e.target.value })}>
+              <Select label="Filter by Cinema Branch" value={compose.targetBranch} onChange={e => setCompose({ ...compose, targetBranch: e.target.value })}>
                 {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </Select>
             )}
+            {compose.audience === 'loyaltyTier' && (
+              <Select label="Select Customer Loyalty Tier" value={compose.targetTier} onChange={e => setCompose({ ...compose, targetTier: e.target.value })}>
+                <option value="all_vips">All VIPs (Silver, Gold & Platinum)</option>
+                <option value="gold_platinum">High Value (Gold & Platinum VIPs)</option>
+                <option value="platinum">Platinum Elite Only (1200+ pts)</option>
+                <option value="gold">Gold VIPs Only (700-1199 pts)</option>
+                <option value="silver">Silver Members Only (300-699 pts)</option>
+                <option value="bronze">Bronze Members Only (0-299 pts)</option>
+              </Select>
+            )}
+
+            {/* Live Recipient Counter Badge */}
+            <div className="mt-3 flex items-center justify-between p-2.5 rounded-lg bg-cinema-elevated border border-white/5 text-xs text-text-secondary">
+              <div className="flex items-center gap-2">
+                <Award className="w-4 h-4 text-accent-primary" />
+                <span>Audience Reach Preview:</span>
+              </div>
+              <span className="font-semibold text-accent-primary">
+                {estimatedRecipientCount} {estimatedRecipientCount === 1 ? 'user' : 'users'} matched
+              </span>
+            </div>
           </div>
           <Input
             label="Link (optional)"

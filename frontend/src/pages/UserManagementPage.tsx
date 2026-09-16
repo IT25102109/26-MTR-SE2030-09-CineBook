@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Plus, Search, Edit2, Trash2, UserCircle, Shield } from 'lucide-react';
-import { getUsers, saveUser, deleteUser } from '@/data/store';
+import { Plus, Search, Edit2, Trash2, UserCircle, Shield, Award, Crown } from 'lucide-react';
+import { getUsers, saveUser, deleteUser, awardLoyaltyPoints } from '@/data/store';
 import { useToast } from '@/contexts/ToastContext';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -34,6 +34,9 @@ export function UserManagementPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+  const [pointsTarget, setPointsTarget] = useState<User | null>(null);
+  const [pointsDelta, setPointsDelta] = useState('100');
+  const [pointsReason, setPointsReason] = useState('Customer appreciation bonus');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -231,6 +234,22 @@ export function UserManagementPage() {
             render: (u) => <Badge variant={roleBadge[u.role]}>{roleLabels[u.role]}</Badge>,
           },
           {
+            key: 'loyalty',
+            header: 'Loyalty Tier & Points',
+            render: (u) => {
+              if (u.role !== 'customer') return <span className="text-xs text-text-muted">—</span>;
+              const tier = u.loyaltyTier || 'Bronze';
+              const pts = u.loyaltyPoints ?? 0;
+              const variant = tier === 'Platinum' ? 'purple' : tier === 'Gold' ? 'amber' : tier === 'Silver' ? 'blue' : 'default';
+              return (
+                <div className="flex items-center gap-2">
+                  <Badge variant={variant as any}>{tier}</Badge>
+                  <span className="text-xs font-semibold text-text-secondary">{pts} pts</span>
+                </div>
+              );
+            },
+          },
+          {
             key: 'id',
             header: 'User ID',
             render: (u) => <span className="text-xs text-text-muted font-mono">{u.id}</span>,
@@ -240,6 +259,19 @@ export function UserManagementPage() {
             header: '',
             render: (u) => (
               <div className="flex gap-2">
+                {u.role === 'customer' && (
+                  <button
+                    onClick={() => {
+                      setPointsTarget(u);
+                      setPointsDelta('100');
+                      setPointsReason('Customer appreciation bonus');
+                    }}
+                    title="Adjust Customer Loyalty Points"
+                    className="text-text-muted hover:text-amber-400 transition-colors p-1"
+                  >
+                    <Award className="w-4 h-4" />
+                  </button>
+                )}
                 <button onClick={() => openEdit(u)} className="text-text-muted hover:text-accent-primary transition-colors p-1">
                   <Edit2 className="w-4 h-4" />
                 </button>
@@ -337,6 +369,54 @@ export function UserManagementPage() {
         <p className="text-sm text-text-secondary">
           Delete <span className="font-medium text-text-primary">{deleteTarget?.name}</span>? This will remove their account but not their past bookings.
         </p>
+      </Modal>
+
+      {/* Loyalty Points Adjustment Modal */}
+      <Modal
+        open={!!pointsTarget}
+        onClose={() => setPointsTarget(null)}
+        title="Adjust Customer Loyalty Points"
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setPointsTarget(null)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                if (!pointsTarget) return;
+                const delta = parseInt(pointsDelta, 10);
+                if (isNaN(delta) || delta === 0) {
+                  toast('error', 'Please enter a valid points amount');
+                  return;
+                }
+                awardLoyaltyPoints(pointsTarget.id, delta);
+                setTick(t => t + 1);
+                toast('success', `Adjusted points for ${pointsTarget.name} (${delta > 0 ? '+' : ''}${delta} pts). Reason: ${pointsReason}`);
+                setPointsTarget(null);
+              }}
+            >
+              Confirm Adjustment
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-text-muted">
+            Update points balance for <strong className="text-text-primary">{pointsTarget?.name}</strong>. Their loyalty tier and benefits will automatically recalculate.
+          </p>
+          <Input
+            label="Points Adjustment (+ or -)"
+            type="number"
+            value={pointsDelta}
+            onChange={e => setPointsDelta(e.target.value)}
+            placeholder="e.g. 100 or -50"
+          />
+          <Input
+            label="Reason / Audit Note"
+            value={pointsReason}
+            onChange={e => setPointsReason(e.target.value)}
+            placeholder="e.g. Customer service compensation or promo"
+          />
+        </div>
       </Modal>
     </div>
   );

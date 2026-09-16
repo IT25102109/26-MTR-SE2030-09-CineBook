@@ -1,5 +1,5 @@
 import { mockMovies, mockBranches, mockShowtimes, mockBookings, mockUsers, mockAdminUsers, mockNotifications, mockNotificationTemplates, mockMovieReviews, mockPromotions } from '@/data/mockData';
-import type { Movie, Branch, Showtime, Booking, User, Role, Notification, NotificationTemplate, NotificationPreferences, MovieReview, Promotion, MovieRecommendation } from '@/types';
+import type { Movie, Branch, Showtime, Booking, User, Role, Notification, NotificationTemplate, NotificationPreferences, MovieReview, Promotion, MovieRecommendation, LoyaltyVoucher } from '@/types';
 import { movieApi } from '@/api/movieApi';
 import { branchApi } from '@/api/branchApi';
 import { showtimeApi } from '@/api/showtimeApi';
@@ -20,6 +20,7 @@ const KEYS = {
   promotions: 'cinebook_promotions',
   wishlist: 'cinebook_wishlist',
   waitlists: 'cinebook_waitlists',
+  vouchers: 'cinebook_loyalty_vouchers',
 };
 
 export function seedData(): void {
@@ -302,6 +303,13 @@ export function saveBooking(booking: Booking): void {
   const bookings = getBookings();
   bookings.push(booking);
   write(KEYS.bookings, bookings);
+
+  // Award Customer Loyalty Points (1 point per $1 spent)
+  const earnedPoints = Math.round(booking.totalAmount);
+  if (earnedPoints > 0) {
+    awardLoyaltyPoints(booking.userId, earnedPoints);
+  }
+
   bookingApi.createBooking(booking).then(created => {
     if (created.id && created.id !== booking.id) {
       const current = getBookings();
@@ -368,9 +376,99 @@ export function rescheduleBooking(
   }
 }
 
+// Loyalty & Tier Progression (Member 6: IT25101952)
+export function calculateLoyaltyTier(points: number): 'Bronze' | 'Silver' | 'Gold' | 'Platinum' {
+  if (points >= 1200) return 'Platinum';
+  if (points >= 700) return 'Gold';
+  if (points >= 300) return 'Silver';
+  return 'Bronze';
+}
+
+export function awardLoyaltyPoints(userId: string, points: number): void {
+  const users = getUsers();
+  const user = users.find(u => u.id === userId);
+  if (user) {
+    const currentPoints = user.loyaltyPoints ?? 0;
+    const newPoints = Math.max(0, currentPoints + points);
+    user.loyaltyPoints = newPoints;
+    user.loyaltyTier = calculateLoyaltyTier(newPoints);
+    saveUser(user);
+
+    // Sync current user session if it matches
+    const current = getCurrentUser();
+    if (current && current.id === userId) {
+      current.loyaltyPoints = newPoints;
+      current.loyaltyTier = user.loyaltyTier;
+      setCurrentUser(current);
+    }
+  }
+}
+
+export function getUserLoyaltyVouchers(userId: string): LoyaltyVoucher[] {
+  const all = read<LoyaltyVoucher>(KEYS.vouchers);
+  return all.filter(v => v.userId === userId);
+}
+
+export function redeemLoyaltyReward(userId: string, title: string, pointsCost: number): { success: boolean; voucher?: LoyaltyVoucher; message: string } {
+  const users = getUsers();
+  const user = users.find(u => u.id === userId);
+  if (!user) return { success: false, message: 'User not found' };
+
+  const currentPoints = user.loyaltyPoints ?? 0;
+  if (currentPoints < pointsCost) {
+    return { success: false, message: `Insufficient loyalty points. You need ${pointsCost} pts but currently have ${currentPoints} pts.` };
+  }
+
+  // Deduct points
+  const newPoints = currentPoints - pointsCost;
+  user.loyaltyPoints = newPoints;
+  user.loyaltyTier = calculateLoyaltyTier(newPoints);
+  saveUser(user);
+
+  const current = getCurrentUser();
+  if (current && current.id === userId) {
+    current.loyaltyPoints = newPoints;
+    current.loyaltyTier = user.loyaltyTier;
+    setCurrentUser(current);
+  }
+
+  // Generate unique voucher code
+  const codePrefix = title.split(' ')[0].replace(/[^A-Z]/gi, '').toUpperCase().slice(0, 4) || 'REWARD';
+  const voucherCode = `CB-${codePrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000).toISOString(); // 60 days validity
+
+  const voucher: LoyaltyVoucher = {
+    id: `vch_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    userId,
+    code: voucherCode,
+    title,
+    pointsCost,
+    redeemedAt: now.toISOString(),
+    expiresAt,
+  };
+
+  const allVouchers = read<LoyaltyVoucher>(KEYS.vouchers);
+  allVouchers.unshift(voucher);
+  write(KEYS.vouchers, allVouchers);
+
+  return { success: true, voucher, message: `Redeemed ${title}! Voucher Code: ${voucherCode}` };
+}
+
 // Users
 export function getUsers(): User[] {
-  return read<User>(KEYS.users);
+  const users = read<User>(KEYS.users);
+  return users.map(u => {
+    if (u.role === 'customer' && (u.loyaltyPoints === undefined || !u.loyaltyTier)) {
+      const defaultPts = u.id === 'u1' ? 480 : u.id === 'u4' ? 1450 : u.id === 'u5' ? 860 : 120;
+      return {
+        ...u,
+        loyaltyPoints: defaultPts,
+        loyaltyTier: calculateLoyaltyTier(defaultPts),
+      };
+    }
+    return u;
+  });
 }
 
 export function saveUser(user: User): void {
@@ -391,7 +489,17 @@ export function deleteUser(id: string): void {
 // Auth
 export function getCurrentUser(): User | null {
   const data = localStorage.getItem(KEYS.currentUser);
-  return data ? JSON.parse(data) : null;
+  if (!data) return null;
+  const user: User = JSON.parse(data);
+  if (user.role === 'customer' && (user.loyaltyPoints === undefined || !user.loyaltyTier)) {
+    const stored = getUsers().find(u => u.id === user.id);
+    if (stored) {
+      user.loyaltyPoints = stored.loyaltyPoints;
+      user.loyaltyTier = stored.loyaltyTier;
+      localStorage.setItem(KEYS.currentUser, JSON.stringify(user));
+    }
+  }
+  return user;
 }
 
 export function setCurrentUser(user: User | null): void {
@@ -403,7 +511,8 @@ export function setCurrentUser(user: User | null): void {
 }
 
 export function loginAsRole(role: Role): User {
-  const user = mockUsers.find(u => u.role === role)!;
+  const allUsers = getUsers();
+  const user = allUsers.find(u => u.role === role) || mockUsers.find(u => u.role === role)!;
   setCurrentUser(user);
   return user;
 }
