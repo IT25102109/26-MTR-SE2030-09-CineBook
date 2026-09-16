@@ -223,6 +223,16 @@ export async function updateShowtimeSeats(showtimeId: string, seats: string[]): 
   }
 }
 
+export async function releaseShowtimeSeats(showtimeId: string, seats: string[]): Promise<void> {
+  const showtimes = getShowtimes();
+  const idx = showtimes.findIndex(s => s.id === showtimeId);
+  if (idx >= 0) {
+    const seatSet = new Set(seats);
+    showtimes[idx].bookedSeats = showtimes[idx].bookedSeats.filter(s => !seatSet.has(s));
+    write(KEYS.showtimes, showtimes);
+  }
+}
+
 // Bookings
 export function getBookings(): Booking[] {
   return read<Booking>(KEYS.bookings);
@@ -259,6 +269,46 @@ export function updateBooking(id: string, updates: Partial<Booking>): void {
         console.warn('API cancelBooking sync failed, kept locally:', err)
       );
     }
+  }
+}
+
+export function cancelBookingWithRefund(id: string, refundAmount: number): void {
+  const bookings = getBookings();
+  const target = bookings.find(b => b.id === id);
+  if (target) {
+    // Release seats back to showtime inventory
+    releaseShowtimeSeats(target.showtimeId, target.seats);
+
+    updateBooking(id, {
+      status: 'cancelled',
+      refundStatus: refundAmount > 0 ? 'processed' : 'none',
+      refundAmount: refundAmount,
+    });
+  }
+}
+
+export function rescheduleBooking(
+  id: string,
+  newShowtimeId: string,
+  newDate: string,
+  newTime: string,
+  newHallName: string
+): void {
+  const bookings = getBookings();
+  const target = bookings.find(b => b.id === id);
+  if (target) {
+    // Release seats from old showtime
+    releaseShowtimeSeats(target.showtimeId, target.seats);
+    // Reserve seats in new showtime
+    updateShowtimeSeats(newShowtimeId, target.seats);
+
+    updateBooking(id, {
+      showtimeId: newShowtimeId,
+      date: newDate,
+      time: newTime,
+      hallName: newHallName,
+      rescheduledFrom: `${target.date} ${target.time}`,
+    });
   }
 }
 

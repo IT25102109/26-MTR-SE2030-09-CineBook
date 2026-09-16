@@ -105,6 +105,17 @@ public class ShowtimeService {
         return showtimeRepository.save(existing);
     }
 
+    public Showtime removeBookedSeats(Long id, List<String> seatsToRemove) {
+        Showtime existing = getShowtimeById(id);
+        List<String> current = existing.getBookedSeats();
+        if (current != null && seatsToRemove != null) {
+            current.removeAll(seatsToRemove);
+            existing.setBookedSeats(current);
+            return showtimeRepository.save(existing);
+        }
+        return existing;
+    }
+
     public void deleteShowtime(Long id) {
         showtimeRepository.deleteById(id);
     }

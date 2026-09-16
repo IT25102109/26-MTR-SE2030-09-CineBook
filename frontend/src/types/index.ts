@@ -71,6 +71,8 @@ export interface Booking {
   totalAmount: number;
   status: 'confirmed' | 'cancelled';
   refundStatus: 'none' | 'pending' | 'processed';
+  refundAmount?: number;
+  rescheduledFrom?: string;
   bookingDate: string;
 }
 

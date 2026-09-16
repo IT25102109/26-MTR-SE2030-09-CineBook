@@ -52,4 +52,14 @@ public class BookingController {
     public Booking cancelBooking(@PathVariable Long id) {
         return bookingService.cancelBooking(id);
     }
+
+    @PutMapping("/{id}/reschedule")
+    public Booking rescheduleBooking(
+            @PathVariable Long id,
+            @RequestParam Long newShowtimeId,
+            @RequestParam String newDate,
+            @RequestParam String newTime,
+            @RequestParam String newHallName) {
+        return bookingService.rescheduleBooking(id, newShowtimeId, newDate, newTime, newHallName);
+    }
 }

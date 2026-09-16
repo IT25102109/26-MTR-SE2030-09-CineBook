@@ -63,6 +63,10 @@ public class Booking {
 
     private String refundStatus; // "none" | "pending" | "processed"
 
+    private Double refundAmount;
+
+    private String rescheduledFrom;
+
     private String paymentMethod; // "card" | "wallet" | "bank"
 
     private String paymentStatus; // "paid" | "refunded"
