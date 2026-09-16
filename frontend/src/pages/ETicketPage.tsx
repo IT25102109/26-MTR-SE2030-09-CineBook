@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { CheckCircle2, Calendar, Clock, MapPin, Film, Download, Home, ShieldCheck, QrCode, ScanLine, ArrowRight } from 'lucide-react';
+import { CheckCircle2, Calendar, Clock, MapPin, Film, Download, Home, ShieldCheck, QrCode, ScanLine, ArrowRight, FileText, Printer } from 'lucide-react';
 import { getBookings } from '@/data/store';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -11,6 +11,7 @@ export function ETicketPage() {
   const booking = useMemo(() => getBookings().find(b => b.id === bookingId), [bookingId]);
 
   const [showScannerModal, setShowScannerModal] = useState(false);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [scanStep, setScanStep] = useState<'scanning' | 'verified'>('scanning');
   const [isCheckedIn, setIsCheckedIn] = useState(() => {
     return localStorage.getItem(`cinebook_checkin_${bookingId}`) === 'true';
@@ -229,7 +230,129 @@ export function ETicketPage() {
         </div>
       </Modal>
 
+      {/* Official Tax Invoice Modal (Phase 3 - Function 4: IT25102892) */}
+      <Modal
+        open={showInvoiceModal}
+        onClose={() => setShowInvoiceModal(false)}
+        title="Official Tax Invoice & Receipt"
+        size="lg"
+        footer={
+          <div className="flex justify-between items-center w-full">
+            <Button variant="ghost" onClick={() => setShowInvoiceModal(false)}>Close</Button>
+            <Button onClick={() => window.print()} className="flex items-center gap-1.5">
+              <Printer className="w-4 h-4" /> Print / Save PDF Invoice
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-6 p-2 text-text-primary">
+          {/* Invoice Header */}
+          <div className="flex justify-between items-start border-b border-white/10 pb-4">
+            <div>
+              <h2 className="text-xl font-display font-bold text-accent-primary">CineBook Entertainment PLC</h2>
+              <p className="text-xs text-text-secondary mt-0.5">National Cinema & Entertainment Network</p>
+              <div className="mt-2 text-[11px] font-mono text-text-muted space-y-0.5">
+                <p>VAT Reg: <span className="text-text-primary">SL-VAT-2026-9828-CB</span></p>
+                <p>Operator License: <span className="text-text-primary">LKR-CINEMA-092-A</span></p>
+                <p>Branch: <span className="text-text-primary">{booking.branchName}</span></p>
+              </div>
+            </div>
+            <div className="text-right">
+              <Badge variant="green" className="text-xs px-2.5 py-1 mb-2 font-mono">
+                PAID IN FULL
+              </Badge>
+              <p className="text-xs font-mono font-bold text-text-primary">INV-{booking.id.toUpperCase()}</p>
+              <p className="text-[11px] text-text-muted mt-1">
+                Date: {booking.bookingDate || new Date().toISOString().split('T')[0]}
+              </p>
+            </div>
+          </div>
+
+          {/* Customer & Screening Info */}
+          <div className="grid grid-cols-2 gap-4 text-xs">
+            <div className="p-3 rounded-xl bg-cinema-base hairline">
+              <span className="text-text-muted uppercase tracking-wider font-semibold block mb-1">Billed To</span>
+              <p className="font-semibold text-text-primary">{booking.userId}</p>
+              <p className="text-text-secondary mt-0.5">Payment Method: Digital Gateway</p>
+              <p className="text-emerald-400 font-mono mt-1 text-[11px]">Auth: AUTH-{booking.id.slice(-6).toUpperCase()}</p>
+            </div>
+            <div className="p-3 rounded-xl bg-cinema-base hairline">
+              <span className="text-text-muted uppercase tracking-wider font-semibold block mb-1">Screening Summary</span>
+              <p className="font-semibold text-text-primary">{booking.movieTitle}</p>
+              <p className="text-text-secondary mt-0.5">{booking.hallName} • {booking.seats.length} Seat(s): {booking.seats.sort().join(', ')}</p>
+              <p className="text-text-muted mt-1">{booking.date} at {booking.time}</p>
+            </div>
+          </div>
+
+          {/* Itemized Table */}
+          <div className="border border-white/10 rounded-xl overflow-hidden">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-cinema-base text-text-muted border-b border-white/10">
+                <tr>
+                  <th className="py-2.5 px-3">Description</th>
+                  <th className="py-2.5 px-3 text-center">Qty</th>
+                  <th className="py-2.5 px-3 text-right">Tax Rate</th>
+                  <th className="py-2.5 px-3 text-right">Amount ($)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5 font-mono">
+                <tr>
+                  <td className="py-2.5 px-3 font-sans">
+                    Cinema Admission Ticket ({booking.movieTitle})
+                    <p className="text-[10px] text-text-muted font-mono">{booking.seats.join(', ')}</p>
+                  </td>
+                  <td className="py-2.5 px-3 text-center">{booking.seats.length}</td>
+                  <td className="py-2.5 px-3 text-right">8.0%</td>
+                  <td className="py-2.5 px-3 text-right">
+                    ${((booking.totalAmount - (booking.seats.length * 1.50)) / 1.08).toFixed(2)}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-2.5 px-3 font-sans">
+                    Turnstile Gate Facility & Digital Booking Surcharge
+                  </td>
+                  <td className="py-2.5 px-3 text-center">{booking.seats.length}</td>
+                  <td className="py-2.5 px-3 text-right">0.0%</td>
+                  <td className="py-2.5 px-3 text-right">
+                    ${(booking.seats.length * 1.50).toFixed(2)}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-2.5 px-3 font-sans text-text-secondary">
+                    VAT & Municipal Entertainment Tax (8%)
+                  </td>
+                  <td className="py-2.5 px-3 text-center">-</td>
+                  <td className="py-2.5 px-3 text-right">8.0%</td>
+                  <td className="py-2.5 px-3 text-right text-emerald-400">
+                    ${(booking.totalAmount - ((booking.totalAmount - (booking.seats.length * 1.50)) / 1.08) - (booking.seats.length * 1.50)).toFixed(2)}
+                  </td>
+                </tr>
+              </tbody>
+              <tfoot className="bg-cinema-base border-t border-white/10 font-bold">
+                <tr>
+                  <td colSpan={3} className="py-3 px-3 text-right font-sans">Total Paid (Tax Inclusive):</td>
+                  <td className="py-3 px-3 text-right text-accent-primary font-mono text-sm">
+                    ${booking.totalAmount.toFixed(2)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[11px] flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+              <span>This is an official computer-generated tax invoice compliant with Inland Revenue regulations.</span>
+            </div>
+            <span className="font-mono font-bold text-xs uppercase">E-SEAL VERIFIED</span>
+          </div>
+        </div>
+      </Modal>
+
       <div className="flex items-center gap-3 mt-8 justify-center flex-wrap">
+        <Button variant="outline" onClick={() => setShowInvoiceModal(true)} className="flex items-center gap-1.5">
+          <FileText className="w-4 h-4 text-accent-primary" /> Tax Invoice
+        </Button>
         <Button variant="outline" onClick={() => window.print()}>
           <Download className="w-4 h-4" /> Print Ticket
         </Button>

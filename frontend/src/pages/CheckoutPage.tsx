@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { ChevronLeft, Lock, CreditCard, Ticket, Smartphone, Building2, QrCode, Tag, Check, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { ChevronLeft, Lock, CreditCard, Ticket, Smartphone, Building2, QrCode, Tag, Check, CheckCircle2, ShieldCheck, Users, Split, Send } from 'lucide-react';
 import { getShowtime, getMovie, getBranch, getHall, saveBooking, saveNotification, getUsers, validatePromoCode } from '@/data/store';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -36,6 +36,13 @@ export function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'wallet' | 'transfer'>('card');
   const [processing, setProcessing] = useState(false);
 
+  // Group Split Payment State (Phase 3 - Function 4: IT25102892)
+  const [splitPaymentEnabled, setSplitPaymentEnabled] = useState(false);
+  const [splitCount, setSplitCount] = useState(2); // 2, 3, 4
+  const [splitFriends, setSplitFriends] = useState<Array<{ name: string; contact: string; status: 'pending' | 'authorized' }>>([
+    { name: 'Friend 1', contact: '0779876543', status: 'pending' },
+  ]);
+
   // Card fields
   const [cardName, setCardName] = useState(user?.name || '');
   const [cardNumber, setCardNumber] = useState('');
@@ -68,6 +75,28 @@ export function CheckoutPage() {
   const tax = (subtotal + bookingFee) * 0.08;
   const grossTotal = subtotal + bookingFee + tax;
   const finalTotal = Math.max(0, grossTotal - discountAmount);
+  const perPersonShare = splitPaymentEnabled ? Math.round((finalTotal / splitCount) * 100) / 100 : finalTotal;
+
+  const handleSplitCountChange = (count: number) => {
+    setSplitCount(count);
+    const newFriends: Array<{ name: string; contact: string; status: 'pending' | 'authorized' }> = [];
+    for (let i = 1; i < count; i++) {
+      newFriends.push(splitFriends[i - 1] || { name: `Friend ${i}`, contact: '077' + Math.floor(1000000 + Math.random() * 9000000), status: 'pending' });
+    }
+    setSplitFriends(newFriends);
+  };
+
+  const handleSimulateAuthorize = (idx: number) => {
+    const updated = [...splitFriends];
+    updated[idx] = { ...updated[idx], status: 'authorized' };
+    setSplitFriends(updated);
+    toast('success', `${updated[idx].name}'s share of $${perPersonShare.toFixed(2)} authorized!`);
+  };
+
+  const handleAuthorizeAll = () => {
+    setSplitFriends(splitFriends.map(f => ({ ...f, status: 'authorized' })));
+    toast('success', `All ${splitFriends.length} friend shares approved!`);
+  };
 
   const formatCardNumber = (val: string) => {
     const digits = val.replace(/\D/g, '').slice(0, 16);
@@ -189,6 +218,138 @@ export function CheckoutPage() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Payment form */}
         <div className="lg:col-span-3 space-y-6">
+          {/* Group Split Payment Feature (Function 4: IT25102892) */}
+          <Card className="p-5 border border-white/10 bg-gradient-to-br from-cinema-card to-cinema-card/60">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-xl bg-accent-primary/10 text-accent-primary flex items-center justify-center">
+                  <Split className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-display font-semibold text-base text-text-primary">Group Split Payment</h3>
+                  <p className="text-xs text-text-secondary">Divide ticket costs evenly between friends with instant shares</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSplitPaymentEnabled(!splitPaymentEnabled)}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                  splitPaymentEnabled
+                    ? 'bg-accent-primary text-black border-accent-primary shadow-glow-amber'
+                    : 'bg-cinema-base text-text-secondary border-white/10 hover:border-white/20'
+                }`}
+              >
+                {splitPaymentEnabled ? 'Enabled ✓' : 'Enable Split'}
+              </button>
+            </div>
+
+            {splitPaymentEnabled && (
+              <div className="mt-4 pt-4 border-t border-white/5 space-y-4 animate-fade-in">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-xs text-text-secondary font-medium">Split Between:</span>
+                  <div className="flex gap-2">
+                    {[2, 3, 4].map(n => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => handleSplitCountChange(n)}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold border transition-all ${
+                          splitCount === n
+                            ? 'bg-accent-primary text-black border-accent-primary'
+                            : 'bg-cinema-base text-text-secondary border-white/10 hover:border-white/20'
+                        }`}
+                      >
+                        {n} Friends (${(finalTotal / n).toFixed(2)} ea.)
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Per person share highlight */}
+                <div className="p-3.5 rounded-xl bg-cinema-base hairline flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-text-secondary">Equal Share Per Person</p>
+                    <p className="text-[11px] text-text-muted">Total divided across {splitCount} payers</p>
+                  </div>
+                  <span className="text-xl font-display font-bold text-accent-primary">
+                    ${perPersonShare.toFixed(2)}
+                  </span>
+                </div>
+
+                {/* Co-payer friend list */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-cinema-base border border-emerald-500/20">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <div>
+                        <span className="text-xs font-semibold text-text-primary">You (Organizer)</span>
+                        <p className="text-[10px] text-text-muted">Primary payment method below</p>
+                      </div>
+                    </div>
+                    <Badge variant="green" className="text-xs">
+                      Your Share: ${perPersonShare.toFixed(2)}
+                    </Badge>
+                  </div>
+
+                  {splitFriends.map((friend, idx) => (
+                    <div key={idx} className="p-3 rounded-xl bg-cinema-base border border-white/5 flex items-center justify-between gap-3 flex-wrap">
+                      <div className="flex-1 min-w-[140px]">
+                        <input
+                          type="text"
+                          value={friend.name}
+                          onChange={e => {
+                            const updated = [...splitFriends];
+                            updated[idx].name = e.target.value;
+                            setSplitFriends(updated);
+                          }}
+                          placeholder={`Friend ${idx + 1} Name`}
+                          className="bg-transparent text-xs font-semibold text-text-primary focus:outline-none w-full border-b border-transparent focus:border-accent-primary/40"
+                        />
+                        <input
+                          type="text"
+                          value={friend.contact}
+                          onChange={e => {
+                            const updated = [...splitFriends];
+                            updated[idx].contact = e.target.value;
+                            setSplitFriends(updated);
+                          }}
+                          placeholder="Phone / WhatsApp / Email"
+                          className="bg-transparent text-[11px] text-text-muted focus:outline-none w-full mt-0.5"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {friend.status === 'authorized' ? (
+                          <Badge variant="green" className="text-[10px] flex items-center gap-1">
+                            <Check className="w-3 h-3" /> Paid ${perPersonShare.toFixed(2)}
+                          </Badge>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleSimulateAuthorize(idx)}
+                            className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white/5 hover:bg-white/10 text-amber-300 border border-amber-500/30 transition-all flex items-center gap-1"
+                          >
+                            <Send className="w-3 h-3" /> Simulate Pay
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-text-muted">Status: {splitFriends.filter(f => f.status === 'authorized').length + 1} of {splitCount} Paid</span>
+                  <button
+                    type="button"
+                    onClick={handleAuthorizeAll}
+                    className="text-xs text-accent-primary hover:underline font-medium"
+                  >
+                    Simulate All Friends Approved (Demo)
+                  </button>
+                </div>
+              </div>
+            )}
+          </Card>
+
           {/* Payment Method Selector */}
           <div className="flex gap-2 p-1.5 bg-cinema-card hairline rounded-xl">
             <button
@@ -449,9 +610,19 @@ export function CheckoutPage() {
             </div>
 
             <div className="flex justify-between items-center py-4">
-              <span className="font-medium">Total</span>
+              <span className="font-medium">Total Gross</span>
               <span className="text-2xl font-display font-bold text-accent-primary">${finalTotal.toFixed(2)}</span>
             </div>
+
+            {splitPaymentEnabled && (
+              <div className="flex justify-between items-center py-2.5 px-3.5 rounded-xl bg-accent-primary/10 border border-accent-primary/20 mb-4 text-xs">
+                <div>
+                  <span className="font-semibold text-accent-primary">Your Share ({splitCount} Split)</span>
+                  <p className="text-[10px] text-text-muted">Friends pay remaining ${(finalTotal - perPersonShare).toFixed(2)}</p>
+                </div>
+                <span className="font-display font-bold text-accent-primary text-base">${perPersonShare.toFixed(2)}</span>
+              </div>
+            )}
 
             <Button fullWidth size="lg" onClick={handlePay} disabled={processing}>
               {processing ? (
@@ -461,7 +632,8 @@ export function CheckoutPage() {
                 </>
               ) : (
                 <>
-                  <Lock className="w-4 h-4" /> Pay ${finalTotal.toFixed(2)}
+                  <Lock className="w-4 h-4" />{' '}
+                  {splitPaymentEnabled ? `Pay Your Share: $${perPersonShare.toFixed(2)}` : `Pay $${finalTotal.toFixed(2)}`}
                 </>
               )}
             </Button>
