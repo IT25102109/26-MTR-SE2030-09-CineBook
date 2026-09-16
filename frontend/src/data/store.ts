@@ -1,5 +1,8 @@
 import { mockMovies, mockBranches, mockShowtimes, mockBookings, mockUsers, mockAdminUsers, mockNotifications, mockNotificationTemplates } from '@/data/mockData';
 import type { Movie, Branch, Showtime, Booking, User, Role, Notification, NotificationTemplate, NotificationPreferences } from '@/types';
+import { movieApi } from '@/api/movieApi';
+import { branchApi } from '@/api/branchApi';
+import { showtimeApi } from '@/api/showtimeApi';
 
 const KEYS = {
   movies: 'cinebook_movies',
@@ -26,6 +29,28 @@ export function seedData(): void {
   localStorage.setItem(KEYS.seeded, 'true');
 }
 
+export async function syncFromBackend(): Promise<void> {
+  try {
+    const [moviesResult, branchesResult, showtimesResult] = await Promise.allSettled([
+      movieApi.getMovies(),
+      branchApi.getBranches(),
+      showtimeApi.getShowtimes(),
+    ]);
+
+    if (moviesResult.status === 'fulfilled' && moviesResult.value && moviesResult.value.length > 0) {
+      write(KEYS.movies, moviesResult.value);
+    }
+    if (branchesResult.status === 'fulfilled' && branchesResult.value && branchesResult.value.length > 0) {
+      write(KEYS.branches, branchesResult.value);
+    }
+    if (showtimesResult.status === 'fulfilled' && showtimesResult.value && showtimesResult.value.length > 0) {
+      write(KEYS.showtimes, showtimesResult.value);
+    }
+  } catch (err) {
+    console.warn('Backend sync failed, using local store data:', err);
+  }
+}
+
 function read<T>(key: string): T[] {
   const data = localStorage.getItem(key);
   return data ? JSON.parse(data) : [];
@@ -49,14 +74,32 @@ export function saveMovie(movie: Movie): void {
   const idx = movies.findIndex(m => m.id === movie.id);
   if (idx >= 0) {
     movies[idx] = movie;
+    movieApi.updateMovie(movie.id, movie).catch(err =>
+      console.warn('API updateMovie sync failed, changes kept locally:', err)
+    );
   } else {
-    movies.push({ ...movie, id: `m${Date.now()}` });
+    const localId = movie.id || `m${Date.now()}`;
+    const toSave = { ...movie, id: localId };
+    movies.push(toSave);
+    movieApi.createMovie(movie).then(created => {
+      if (created.id && created.id !== localId) {
+        const current = getMovies();
+        const item = current.find(m => m.id === localId);
+        if (item) item.id = created.id;
+        write(KEYS.movies, current);
+      }
+    }).catch(err =>
+      console.warn('API createMovie sync failed, changes kept locally:', err)
+    );
   }
   write(KEYS.movies, movies);
 }
 
 export function deleteMovie(id: string): void {
   write(KEYS.movies, getMovies().filter(m => m.id !== id));
+  movieApi.deleteMovie(id).catch(err =>
+    console.warn('API deleteMovie sync failed, deletion kept locally:', err)
+  );
 }
 
 // Branches
@@ -73,14 +116,32 @@ export function saveBranch(branch: Branch): void {
   const idx = branches.findIndex(b => b.id === branch.id);
   if (idx >= 0) {
     branches[idx] = branch;
+    branchApi.updateBranch(branch.id, branch).catch(err =>
+      console.warn('API updateBranch sync failed, changes kept locally:', err)
+    );
   } else {
-    branches.push({ ...branch, id: `b${Date.now()}` });
+    const localId = branch.id || `b${Date.now()}`;
+    const toSave = { ...branch, id: localId };
+    branches.push(toSave);
+    branchApi.createBranch(branch).then(created => {
+      if (created.id && created.id !== localId) {
+        const current = getBranches();
+        const item = current.find(b => b.id === localId);
+        if (item) item.id = created.id;
+        write(KEYS.branches, current);
+      }
+    }).catch(err =>
+      console.warn('API createBranch sync failed, changes kept locally:', err)
+    );
   }
   write(KEYS.branches, branches);
 }
 
 export function deleteBranch(id: string): void {
   write(KEYS.branches, getBranches().filter(b => b.id !== id));
+  branchApi.deleteBranch(id).catch(err =>
+    console.warn('API deleteBranch sync failed, deletion kept locally:', err)
+  );
 }
 
 // Showtimes
@@ -101,14 +162,32 @@ export function saveShowtime(showtime: Showtime): void {
   const idx = showtimes.findIndex(s => s.id === showtime.id);
   if (idx >= 0) {
     showtimes[idx] = showtime;
+    showtimeApi.updateShowtime(showtime.id, showtime).catch(err =>
+      console.warn('API updateShowtime sync failed, changes kept locally:', err)
+    );
   } else {
-    showtimes.push({ ...showtime, id: `s${Date.now()}` });
+    const localId = showtime.id || `s${Date.now()}`;
+    const toSave = { ...showtime, id: localId };
+    showtimes.push(toSave);
+    showtimeApi.createShowtime(showtime).then(created => {
+      if (created.id && created.id !== localId) {
+        const current = getShowtimes();
+        const item = current.find(s => s.id === localId);
+        if (item) item.id = created.id;
+        write(KEYS.showtimes, current);
+      }
+    }).catch(err =>
+      console.warn('API createShowtime sync failed, changes kept locally:', err)
+    );
   }
   write(KEYS.showtimes, showtimes);
 }
 
 export function deleteShowtime(id: string): void {
   write(KEYS.showtimes, getShowtimes().filter(s => s.id !== id));
+  showtimeApi.deleteShowtime(id).catch(err =>
+    console.warn('API deleteShowtime sync failed, deletion kept locally:', err)
+  );
 }
 
 export function updateShowtimeSeats(showtimeId: string, seats: string[]): void {
@@ -117,6 +196,9 @@ export function updateShowtimeSeats(showtimeId: string, seats: string[]): void {
   if (idx >= 0) {
     showtimes[idx].bookedSeats = [...showtimes[idx].bookedSeats, ...seats];
     write(KEYS.showtimes, showtimes);
+    showtimeApi.addBookedSeats(showtimeId, seats).catch(err =>
+      console.warn('API addBookedSeats sync failed, changes kept locally:', err)
+    );
   }
 }
 

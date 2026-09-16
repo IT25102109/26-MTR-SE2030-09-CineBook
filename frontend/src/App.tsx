@@ -20,11 +20,12 @@ import { BranchManagementPage } from '@/pages/BranchManagementPage';
 import { UserManagementPage } from '@/pages/UserManagementPage';
 import { NotificationCenterPage } from '@/pages/NotificationCenterPage';
 import { AdminNotificationsPage } from '@/pages/AdminNotificationsPage';
-import { seedData } from '@/data/store';
+import { seedData, syncFromBackend } from '@/data/store';
 
 function App() {
   useEffect(() => {
     seedData();
+    syncFromBackend();
   }, []);
 
   return (

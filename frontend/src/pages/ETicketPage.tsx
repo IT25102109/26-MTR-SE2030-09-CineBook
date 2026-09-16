@@ -9,6 +9,16 @@ export function ETicketPage() {
   const { bookingId } = useParams<{ bookingId: string }>();
   const booking = useMemo(() => getBookings().find(b => b.id === bookingId), [bookingId]);
 
+  const qrPattern = useMemo(() => {
+    if (!booking) return [];
+    const seed = booking.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+    const cells: boolean[] = [];
+    for (let i = 0; i < 144; i++) {
+      cells.push(((seed * (i + 1) * 2654435761) % 2) === 0);
+    }
+    return cells;
+  }, [booking]);
+
   if (!booking) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-20 text-center">
@@ -17,15 +27,6 @@ export function ETicketPage() {
       </div>
     );
   }
-
-  const qrPattern = useMemo(() => {
-    const seed = booking.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-    const cells: boolean[] = [];
-    for (let i = 0; i < 144; i++) {
-      cells.push(((seed * (i + 1) * 2654435761) % 2) === 0);
-    }
-    return cells;
-  }, [booking.id]);
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
