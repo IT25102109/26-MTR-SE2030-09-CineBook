@@ -1,5 +1,5 @@
 import { mockMovies, mockBranches, mockShowtimes, mockBookings, mockUsers, mockAdminUsers, mockNotifications, mockNotificationTemplates, mockMovieReviews, mockPromotions } from '@/data/mockData';
-import type { Movie, Branch, Showtime, Booking, User, Role, Notification, NotificationTemplate, NotificationPreferences, MovieReview, Promotion } from '@/types';
+import type { Movie, Branch, Showtime, Booking, User, Role, Notification, NotificationTemplate, NotificationPreferences, MovieReview, Promotion, MovieRecommendation } from '@/types';
 import { movieApi } from '@/api/movieApi';
 import { branchApi } from '@/api/branchApi';
 import { showtimeApi } from '@/api/showtimeApi';
@@ -18,6 +18,8 @@ const KEYS = {
   notificationPrefs: 'cinebook_notification_prefs',
   reviews: 'cinebook_reviews',
   promotions: 'cinebook_promotions',
+  wishlist: 'cinebook_wishlist',
+  waitlists: 'cinebook_waitlists',
 };
 
 export function seedData(): void {
@@ -266,6 +268,24 @@ export async function releaseShowtimeSeats(showtimeId: string, seats: string[]):
     const seatSet = new Set(seats);
     showtimes[idx].bookedSeats = showtimes[idx].bookedSeats.filter(s => !seatSet.has(s));
     write(KEYS.showtimes, showtimes);
+
+    // Auto-dispatch waitlist alert if seats are released
+    const waitlist = getWaitlist(showtimeId);
+    if (waitlist.length > 0) {
+      const luckyUser = waitlist[0];
+      const st = showtimes[idx];
+      const movie = getMovie(st.movieId);
+      saveNotification({
+        id: `n_wl_${Date.now()}`,
+        type: 'low_availability',
+        title: 'Waitlist Alert: Seats Freed Up!',
+        message: `Seats have just opened up for ${movie ? movie.title : 'your show'} on ${st.date} at ${st.time}! Book now before they are taken.`,
+        userId: luckyUser.userId,
+        read: false,
+        createdAt: new Date().toISOString(),
+        status: 'sent',
+      });
+    }
   }
 }
 
@@ -575,4 +595,145 @@ export function validatePromoCode(code: string, subtotal: number): { valid: bool
   discount = Math.min(discount, subtotal);
   return { valid: true, discount, message: `Applied ${promo.description}`, promo };
 }
+
+// Wishlist
+export function getWishlist(userId: string): string[] {
+  try {
+    const all = JSON.parse(localStorage.getItem(KEYS.wishlist) || '{}');
+    return all[userId] || [];
+  } catch {
+    return [];
+  }
+}
+
+export function isMovieWishlisted(userId: string, movieId: string): boolean {
+  return getWishlist(userId).includes(movieId);
+}
+
+export function toggleWishlist(userId: string, movieId: string): boolean {
+  try {
+    const all = JSON.parse(localStorage.getItem(KEYS.wishlist) || '{}');
+    const list: string[] = all[userId] || [];
+    const idx = list.indexOf(movieId);
+    let wishlisted = false;
+    if (idx >= 0) {
+      list.splice(idx, 1);
+      wishlisted = false;
+    } else {
+      list.push(movieId);
+      wishlisted = true;
+    }
+    all[userId] = list;
+    localStorage.setItem(KEYS.wishlist, JSON.stringify(all));
+    return wishlisted;
+  } catch {
+    return false;
+  }
+}
+
+// Personalized Movie Recommendations Engine
+export function getPersonalizedRecommendations(userId: string): MovieRecommendation[] {
+  const userBookings = getUserBookings(userId).filter(b => b.status === 'confirmed');
+  const allMovies = getMovies();
+
+  if (userBookings.length === 0) {
+    return allMovies
+      .slice(0, 5)
+      .map(movie => ({
+        movie,
+        score: Math.round(85 + (movie.rating / 10) * 12),
+        reason: 'Trending CineBook Community Favorite',
+      }));
+  }
+
+  const genreWeights: Record<string, number> = {};
+  const directorWeights: Record<string, number> = {};
+
+  userBookings.forEach(b => {
+    const movie = getMovie(b.movieId);
+    if (movie) {
+      movie.genre.forEach(g => {
+        genreWeights[g] = (genreWeights[g] || 0) + 1;
+      });
+      if (movie.director) {
+        directorWeights[movie.director] = (directorWeights[movie.director] || 0) + 1;
+      }
+    }
+  });
+
+  const scored: MovieRecommendation[] = allMovies.map(movie => {
+    let rawScore = 60;
+    const matchedGenres: string[] = [];
+
+    movie.genre.forEach(g => {
+      if (genreWeights[g]) {
+        rawScore += genreWeights[g] * 15;
+        matchedGenres.push(g);
+      }
+    });
+
+    if (movie.director && directorWeights[movie.director]) {
+      rawScore += directorWeights[movie.director] * 20;
+    }
+
+    rawScore += (movie.rating / 10) * 15;
+    const finalScore = Math.min(99, Math.round(rawScore));
+
+    let reason = 'Personalized Selection';
+    if (matchedGenres.length > 0) {
+      reason = `${finalScore}% Match • Because you love ${matchedGenres.slice(0, 2).join(' & ')}`;
+    } else if (movie.featured) {
+      reason = `${finalScore}% Match • Featured Blockbuster`;
+    }
+
+    return {
+      movie,
+      score: finalScore,
+      reason,
+    };
+  });
+
+  return scored.sort((a, b) => b.score - a.score).slice(0, 5);
+}
+
+// Waitlist System for Sold-Out Showtimes
+export interface WaitlistEntry {
+  id: string;
+  showtimeId: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  createdAt: string;
+}
+
+export function getWaitlist(showtimeId: string): WaitlistEntry[] {
+  try {
+    const all = JSON.parse(localStorage.getItem(KEYS.waitlists) || '{}');
+    return all[showtimeId] || [];
+  } catch {
+    return [];
+  }
+}
+
+export function joinWaitlist(showtimeId: string, user: { id: string; name: string; email: string }): boolean {
+  try {
+    const all = JSON.parse(localStorage.getItem(KEYS.waitlists) || '{}');
+    const list: WaitlistEntry[] = all[showtimeId] || [];
+    if (list.some(e => e.userId === user.id)) return false;
+    list.push({
+      id: `wl_${Date.now()}`,
+      showtimeId,
+      userId: user.id,
+      userName: user.name,
+      userEmail: user.email,
+      createdAt: new Date().toISOString(),
+    });
+    all[showtimeId] = list;
+    localStorage.setItem(KEYS.waitlists, JSON.stringify(all));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 

@@ -6,6 +6,15 @@ export interface User {
   email: string;
   role: Role;
   avatarColor: string;
+  assignedBranchId?: string; // Cinema Manager Branch Scoping (Member 2)
+  loyaltyPoints?: number;     // Customer Loyalty Points (Member 6)
+  loyaltyTier?: 'Bronze' | 'Silver' | 'Gold' | 'Platinum'; // Loyalty Tier (Member 6)
+}
+
+export interface MovieRecommendation {
+  movie: Movie;
+  score: number; // e.g. 96 (%)
+  reason: string;
 }
 
 export interface Movie {

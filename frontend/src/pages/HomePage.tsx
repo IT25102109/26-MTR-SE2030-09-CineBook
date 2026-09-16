@@ -1,13 +1,16 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, TrendingUp, Calendar } from 'lucide-react';
+import { ChevronRight, TrendingUp, Calendar, Sparkles } from 'lucide-react';
 import { HeroCarousel } from '@/components/movies/HeroCarousel';
 import { MovieCard } from '@/components/movies/MovieCard';
-import { getMovies, getBranches } from '@/data/store';
+import { getMovies, getBranches, getPersonalizedRecommendations } from '@/data/store';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function HomePage() {
+  const { user } = useAuth();
   const movies = useMemo(() => getMovies(), []);
   const branches = useMemo(() => getBranches(), []);
+  const recommendations = useMemo(() => getPersonalizedRecommendations(user?.id || 'guest'), [user]);
 
   const featured = movies.filter(m => m.featured);
   const nowShowing = movies.filter(m => m.status === 'now-showing');
@@ -18,6 +21,42 @@ export function HomePage() {
       <HeroCarousel movies={featured} />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 space-y-20">
+        {/* Personalized Recommendation Engine Carousel (Member 1 - IT25100588) */}
+        <section className="bg-cinema-card/50 p-6 sm:p-8 rounded-3xl hairline relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-accent-primary/5 rounded-full blur-3xl pointer-events-none" />
+          <div className="flex items-center justify-between mb-6 relative z-10">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-accent-primary/20 border border-accent-primary/30 flex items-center justify-center shadow-glow-amber">
+                <Sparkles className="w-5 h-5 text-accent-primary animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-2xl font-display font-bold">Recommended For You</h2>
+                  <span className="text-[11px] font-mono font-bold bg-accent-primary text-black px-2 py-0.5 rounded-full">
+                    AI Curated
+                  </span>
+                </div>
+                <p className="text-sm text-text-secondary">
+                  Personalized selections tailored to your taste, booking habits, and favorite genres
+                </p>
+              </div>
+            </div>
+            <Link to="/movies" className="flex items-center gap-1 text-sm text-text-secondary hover:text-accent-primary transition-colors">
+              Explore All <ChevronRight className="w-4 h-4" />
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5 relative z-10">
+            {recommendations.map((rec, i) => (
+              <MovieCard
+                key={rec.movie.id}
+                movie={rec.movie}
+                index={i}
+                matchScore={rec.score}
+                matchReason={rec.reason}
+              />
+            ))}
+          </div>
+        </section>
         <section>
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
