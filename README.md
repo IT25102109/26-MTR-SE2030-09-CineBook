@@ -12,13 +12,14 @@
 Each team member is individually responsible for the end-to-end design, implementation, and testing of their assigned major function.
 
 | # | Student ID | Member Name | GitHub Username | Assigned Major Function | Dedicated Feature Branch |
-| :---: | :---: | :--- | :--- | :--- | :--- |
-| **1** | `IT25100588` | Kariyawasam K.K.S.S | [`@IT25100588`](https://github.com/IT25100588) | **Movie & Content Discovery** *(Customer side)* | `feature/movie-content-discovery` |
-| **2** | `IT25101655` | Liyanagama P.B | [`@IT25101655`](https://github.com/IT25101655) | **Booking History, Cancellation & Refunds** | `feature/booking-history-refunds` |
-| **3** | `IT25101943` | Janaka P.G.C. | [`@IT25101943`](https://github.com/IT25101943) | **Seat Selection & Booking Engine** | `feature/seat-booking-engine` |
-| **4** | `IT25101952` | Lekamwasam N.L.P.M | [`@IT25101952`](https://github.com/IT25101952) | **Admin Reporting & Analytics Dashboard** | `feature/admin-reporting-analytics` |
-| **5** | `IT25102109` | Bhanuka N.A.D. *(Leader)* | [`@IT25102109`](https://github.com/IT25102109) | **Movie, Showtime & Cinema Management** | `feature/movie-showtime-cinema` |
-| **6** | `IT25102892` | Thathsara M.A.B. | [`@IT25102892`](https://github.com/IT25102892) | **Payment Processing & E-Ticket Generation** | `feature/payment-eticket` |
+| # | Student ID | Member Name | SLIIT Student Email | GitHub Username | Assigned Major Function | Dedicated Feature Branch |
+| :---: | :---: | :--- | :--- | :--- | :--- | :--- |
+| **1** | `IT25100588` | Kariyawasam K.K.S.S | `it25100588@my.sliit.lk` | [`@IT25100588`](https://github.com/IT25100588) | **Movie & Content Discovery** *(Customer side)* | `feature/movie-content-discovery` |
+| **2** | `IT25101655` | Liyanagama P.B | `it25101655@my.sliit.lk` | [`@IT25101655`](https://github.com/IT25101655) | **Booking History, Cancellation & Refunds** | `feature/booking-history-refunds` |
+| **3** | `IT25101943` | Janaka P.G.C. | `it25101943@my.sliit.lk` | [`@IT25101943`](https://github.com/IT25101943) | **Seat Selection & Booking Engine** | `feature/seat-booking-engine` |
+| **4** | `IT25101952` | Lekamwasam N.L.P.M | `it25101952@my.sliit.lk` | [`@IT25101952`](https://github.com/IT25101952) | **Admin Reporting & Analytics Dashboard** | `feature/admin-reporting-analytics` |
+| **5** | `IT25102109` | Bhanuka N.A.D. *(Leader)* | `it25102109@my.sliit.lk` | [`@IT25102109`](https://github.com/IT25102109) | **Movie, Showtime & Cinema Management** | `feature/movie-showtime-cinema` |
+| **6** | `IT25102892` | Thathsara M.A.B. | `it25102892@my.sliit.lk` | [`@IT25102892`](https://github.com/IT25102892) | **Payment Processing & E-Ticket Generation** | `feature/payment-eticket` |
 
 ---
 
