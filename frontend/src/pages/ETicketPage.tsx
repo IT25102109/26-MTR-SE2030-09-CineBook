@@ -1,17 +1,84 @@
 import { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { CheckCircle2, Calendar, Clock, MapPin, Film, Download, Home, ShieldCheck, QrCode, ScanLine, ArrowRight, FileText, Printer } from 'lucide-react';
+import { CheckCircle2, Calendar, Clock, MapPin, Film, Download, Home, ShieldCheck, QrCode, ScanLine, ArrowRight, FileText, Printer, Share2, CalendarPlus, Copy, Check } from 'lucide-react';
 import { getBookings } from '@/data/store';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
+import { useToast } from '@/contexts/ToastContext';
+
+// Calendar Integration Helpers (Function 5: IT25101655)
+export function getGoogleCalendarUrl(booking: { movieTitle: string; branchName: string; hallName: string; date: string; time: string; seats: string[]; id: string }): string {
+  try {
+    const rawTime = booking.time.split(' ')[0] || '18:00';
+    const [hStr, mStr] = rawTime.split(':');
+    let h = parseInt(hStr, 10) || 18;
+    const m = parseInt(mStr, 10) || 0;
+    if (booking.time.toLowerCase().includes('pm') && h < 12) h += 12;
+    if (booking.time.toLowerCase().includes('am') && h === 12) h = 0;
+
+    const startDate = new Date(`${booking.date}T${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:00`);
+    const endDate = new Date(startDate.getTime() + 150 * 60 * 1000);
+    const formatG = (d: Date) => d.toISOString().replace(/-|:|\.\d+/g, '');
+
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent('🎬 ' + booking.movieTitle + ' @ ' + booking.branchName)}&dates=${formatG(startDate)}/${formatG(endDate)}&details=${encodeURIComponent('Seats: ' + booking.seats.join(', ') + '\nHall: ' + booking.hallName + '\nBooking Ref: ' + booking.id)}&location=${encodeURIComponent(booking.branchName)}`;
+  } catch {
+    return 'https://calendar.google.com/';
+  }
+}
+
+export function downloadIcsFile(booking: { movieTitle: string; branchName: string; hallName: string; date: string; time: string; seats: string[]; id: string }) {
+  const rawTime = booking.time.split(' ')[0] || '18:00';
+  const [hStr, mStr] = rawTime.split(':');
+  let h = parseInt(hStr, 10) || 18;
+  const m = parseInt(mStr, 10) || 0;
+  if (booking.time.toLowerCase().includes('pm') && h < 12) h += 12;
+  if (booking.time.toLowerCase().includes('am') && h === 12) h = 0;
+
+  const start = new Date(`${booking.date}T${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:00`);
+  const end = new Date(start.getTime() + 150 * 60 * 1000);
+  const formatUtc = (d: Date) => d.toISOString().replace(/-|:|\.\d+/g, '');
+
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//CineBook//Movie Screening//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    `UID:cinebook-${booking.id}@cinebook.lk`,
+    `DTSTAMP:${formatUtc(new Date())}`,
+    `DTSTART:${formatUtc(start)}`,
+    `DTEND:${formatUtc(end)}`,
+    `SUMMARY:🎬 ${booking.movieTitle} at ${booking.branchName}`,
+    `DESCRIPTION:Seats: ${booking.seats.join(', ')}\\nHall: ${booking.hallName}\\nBooking Ref: ${booking.id}`,
+    `LOCATION:${booking.branchName}`,
+    'STATUS:CONFIRMED',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cinebook-${booking.id}.ics`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 export function ETicketPage() {
   const { bookingId } = useParams<{ bookingId: string }>();
+  const { toast } = useToast();
   const booking = useMemo(() => getBookings().find(b => b.id === bookingId), [bookingId]);
 
   const [showScannerModal, setShowScannerModal] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [showCalendarMenu, setShowCalendarMenu] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [scanStep, setScanStep] = useState<'scanning' | 'verified'>('scanning');
   const [isCheckedIn, setIsCheckedIn] = useState(() => {
     return localStorage.getItem(`cinebook_checkin_${bookingId}`) === 'true';
@@ -349,7 +416,101 @@ export function ETicketPage() {
         </div>
       </Modal>
 
+      {/* Share with a Friend (Digital Guest Pass) Modal */}
+      <Modal
+        open={showShareModal}
+        onClose={() => { setShowShareModal(false); setCopiedLink(false); }}
+        title="Share Digital Guest Pass"
+        size="md"
+        footer={
+          <Button variant="ghost" onClick={() => setShowShareModal(false)}>Close</Button>
+        }
+      >
+        <div className="space-y-4 p-1">
+          <p className="text-xs text-text-secondary">
+            Send an instant digital pass with the entrance QR code, reserved seats, and venue details to your movie companion.
+          </p>
+
+          <div className="p-3.5 rounded-xl bg-cinema-base border border-white/10 space-y-1 text-xs">
+            <p className="font-semibold text-text-primary">{booking.movieTitle}</p>
+            <p className="text-text-secondary">{booking.branchName} • {booking.hallName}</p>
+            <p className="text-accent-primary font-mono">{booking.date} at {booking.time} • Seats: {booking.seats.join(', ')}</p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-text-muted mb-1.5">Direct Ticket Link</label>
+            <div className="flex gap-2">
+              <input
+                readOnly
+                value={`${window.location.origin}/ticket/${booking.id}?guest=true`}
+                className="flex-1 bg-cinema-base border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-text-secondary select-all"
+              />
+              <Button
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/ticket/${booking.id}?guest=true`);
+                  setCopiedLink(true);
+                  toast('success', 'Ticket link copied to clipboard!');
+                  setTimeout(() => setCopiedLink(false), 2000);
+                }}
+                className="flex items-center gap-1.5"
+              >
+                {copiedLink ? <Check className="w-3.5 h-3.5 text-black" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiedLink ? 'Copied' : 'Copy'}
+              </Button>
+            </div>
+          </div>
+
+          <a
+            href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`🍿 Hey! Here is our CineBook ticket for ${booking.movieTitle} at ${booking.branchName} on ${booking.date} at ${booking.time}. Seats: ${booking.seats.join(', ')}.\nPass Link: ${window.location.origin}/ticket/${booking.id}?guest=true`)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors shadow-md"
+          >
+            <Share2 className="w-4 h-4" /> Share via WhatsApp
+          </a>
+        </div>
+      </Modal>
+
       <div className="flex items-center gap-3 mt-8 justify-center flex-wrap">
+        <div className="relative">
+          <Button
+            variant="outline"
+            onClick={() => setShowCalendarMenu(!showCalendarMenu)}
+            className="flex items-center gap-1.5"
+          >
+            <CalendarPlus className="w-4 h-4 text-accent-primary" /> Add to Calendar
+          </Button>
+
+          {showCalendarMenu && (
+            <div className="absolute left-0 bottom-full mb-2 w-56 bg-cinema-card hairline rounded-xl shadow-xl p-1.5 z-30 space-y-1">
+              <a
+                href={getGoogleCalendarUrl(booking)}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setShowCalendarMenu(false)}
+                className="flex items-center gap-2 w-full px-3 py-2 text-xs font-medium rounded-lg text-text-secondary hover:text-white hover:bg-white/5 transition-colors"
+              >
+                Google Calendar
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  downloadIcsFile(booking);
+                  setShowCalendarMenu(false);
+                  toast('success', 'iCalendar (.ics) file downloaded');
+                }}
+                className="flex items-center gap-2 w-full px-3 py-2 text-xs font-medium rounded-lg text-text-secondary hover:text-white hover:bg-white/5 transition-colors text-left"
+              >
+                Download .ics (Apple / Outlook)
+              </button>
+            </div>
+          )}
+        </div>
+
+        <Button variant="outline" onClick={() => setShowShareModal(true)} className="flex items-center gap-1.5">
+          <Share2 className="w-4 h-4 text-accent-primary" /> Share Ticket
+        </Button>
         <Button variant="outline" onClick={() => setShowInvoiceModal(true)} className="flex items-center gap-1.5">
           <FileText className="w-4 h-4 text-accent-primary" /> Tax Invoice
         </Button>

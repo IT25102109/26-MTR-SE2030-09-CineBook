@@ -14,7 +14,13 @@ import {
   Search,
   ShieldCheck,
   ArrowRight,
-  Info
+  Info,
+  Share2,
+  CalendarPlus,
+  Copy,
+  Check,
+  FileCheck,
+  Shield
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -27,8 +33,11 @@ import {
   getShowtime,
   getHall,
   saveNotification,
-  getUsers
+  getUsers,
+  getBookings,
+  saveBooking
 } from '@/data/store';
+import { getGoogleCalendarUrl, downloadIcsFile } from './ETicketPage';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -36,7 +45,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import type { Booking, Showtime } from '@/types';
 
-type FilterTab = 'all' | 'upcoming' | 'completed' | 'cancelled';
+type FilterTab = 'all' | 'upcoming' | 'completed' | 'cancelled' | 'admin-refunds';
 
 interface RefundCalculation {
   tier: 'full' | 'partial' | 'none';
@@ -52,19 +61,30 @@ export function MyBookingsPage() {
   const { toast } = useToast();
   const { addNotification } = useNotifications();
 
+  const isAdminOrManager = user?.role === 'admin' || user?.role === 'cinemaManager';
+
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
   const [rescheduleTarget, setRescheduleTarget] = useState<Booking | null>(null);
   const [selectedNewShowtime, setSelectedNewShowtime] = useState<Showtime | null>(null);
+  const [shareTarget, setShareTarget] = useState<Booking | null>(null);
+  const [refundReviewTarget, setRefundReviewTarget] = useState<Booking | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [calendarMenuTarget, setCalendarMenuTarget] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
 
   const allBookings = useMemo(() => {
     if (!user) return [];
+    if (isAdminOrManager && activeTab === 'admin-refunds') {
+      return getBookings().filter(b => b.status === 'cancelled').sort(
+        (a, b) => new Date(b.bookingDate).getTime() - new Date(a.bookingDate).getTime()
+      );
+    }
     return getUserBookings(user.id).sort(
       (a, b) => new Date(b.bookingDate).getTime() - new Date(a.bookingDate).getTime()
     );
-  }, [user, tick]);
+  }, [user, tick, activeTab, isAdminOrManager]);
 
   // Calculate Tiered Refund based on hours before showtime
   const calculateRefund = (booking: Booking): RefundCalculation => {
@@ -321,6 +341,57 @@ export function MyBookingsPage() {
                     <Link to={`/ticket/${booking.id}`}>
                       <Button size="sm" variant="outline">View Ticket</Button>
                     </Link>
+
+                    {/* Calendar Dropdown */}
+                    <div className="relative">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setCalendarMenuTarget(calendarMenuTarget === booking.id ? null : booking.id)}
+                        className="text-xs hover:text-accent-primary"
+                        title="Add to Calendar"
+                      >
+                        <CalendarPlus className="w-3.5 h-3.5" /> Calendar
+                      </Button>
+                      {calendarMenuTarget === booking.id && (
+                        <div className="absolute right-0 bottom-full mb-1.5 w-48 bg-cinema-card hairline rounded-xl shadow-2xl p-1 z-30 space-y-1">
+                          <a
+                            href={getGoogleCalendarUrl(booking)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => setCalendarMenuTarget(null)}
+                            className="block px-3 py-1.5 text-xs text-text-secondary hover:text-white hover:bg-white/5 rounded-lg"
+                          >
+                            Google Calendar
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              downloadIcsFile(booking);
+                              setCalendarMenuTarget(null);
+                              toast('success', 'iCalendar (.ics) file downloaded');
+                            }}
+                            className="block w-full text-left px-3 py-1.5 text-xs text-text-secondary hover:text-white hover:bg-white/5 rounded-lg"
+                          >
+                            Download .ics (Apple / Outlook)
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setShareTarget(booking);
+                        setCopiedLink(false);
+                      }}
+                      className="text-xs hover:text-accent-primary"
+                      title="Share Digital Guest Pass"
+                    >
+                      <Share2 className="w-3.5 h-3.5" /> Share
+                    </Button>
+
                     <Button
                       size="sm"
                       variant="ghost"
@@ -342,7 +413,21 @@ export function MyBookingsPage() {
                   </>
                 )}
 
-                {isCancelled && (
+                {activeTab === 'admin-refunds' && isCancelled && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setRefundReviewTarget(booking);
+                      setAdminRefundNote('');
+                    }}
+                    className="text-xs text-accent-primary border-accent-primary/40 hover:bg-accent-primary/10 flex items-center gap-1.5"
+                  >
+                    <FileCheck className="w-3.5 h-3.5" /> Review Refund Override
+                  </Button>
+                )}
+
+                {activeTab !== 'admin-refunds' && isCancelled && (
                   <div className="flex items-center gap-1 text-xs text-text-muted">
                     <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
                     <span>Seats returned to inventory</span>
@@ -378,18 +463,24 @@ export function MyBookingsPage() {
 
       {/* Filter Tabs & Search Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-6">
-        <div className="flex gap-1.5 p-1 bg-cinema-card hairline rounded-xl">
-          {(['all', 'upcoming', 'completed', 'cancelled'] as FilterTab[]).map(tab => (
+        <div className="flex gap-1.5 p-1 bg-cinema-card hairline rounded-xl overflow-x-auto">
+          {[
+            { id: 'all', label: 'All Bookings' },
+            { id: 'upcoming', label: 'Upcoming' },
+            { id: 'completed', label: 'Completed' },
+            { id: 'cancelled', label: 'Cancelled & Refunded' },
+            ...(isAdminOrManager ? [{ id: 'admin-refunds', label: 'Admin Refund Review 🛡️' }] : []),
+          ].map(tab => (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${
-                activeTab === tab
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as FilterTab)}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+                activeTab === tab.id
                   ? 'bg-accent-primary text-black font-semibold shadow'
                   : 'text-text-secondary hover:text-white'
               }`}
             >
-              {tab === 'cancelled' ? 'Cancelled & Refunded' : tab}
+              {tab.label}
             </button>
           ))}
         </div>
@@ -639,6 +730,172 @@ export function MyBookingsPage() {
                 </span>
               </div>
             )}
+          </div>
+        )}
+      </Modal>
+
+      {/* Admin Refund Review & Override Modal (Phase 3 - Function 5: IT25101655) */}
+      <Modal
+        open={!!refundReviewTarget}
+        onClose={() => setRefundReviewTarget(null)}
+        title="Admin Cancellation & Refund Review"
+        size="md"
+        footer={
+          <Button variant="ghost" onClick={() => setRefundReviewTarget(null)}>Cancel</Button>
+        }
+      >
+        {refundReviewTarget && (
+          <div className="space-y-4 text-xs">
+            <div className="p-3 bg-cinema-base hairline rounded-xl space-y-1">
+              <div className="flex justify-between">
+                <span className="text-text-muted">Booking Reference:</span>
+                <span className="font-mono font-bold text-text-primary">{refundReviewTarget.id}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-text-muted">Customer User ID:</span>
+                <span className="text-text-primary font-medium">{refundReviewTarget.userId}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-text-muted">Movie & Screening:</span>
+                <span className="text-accent-primary">{refundReviewTarget.movieTitle} ({refundReviewTarget.branchName})</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-text-muted">Original Amount Paid:</span>
+                <span className="font-bold text-text-primary">${refundReviewTarget.totalAmount.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-text-muted">Automated Refund Issued:</span>
+                <span className="font-bold text-amber-400">${(refundReviewTarget.refundAmount || 0).toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-text-muted mb-1">
+                Admin Review Notes / Justification:
+              </label>
+              <textarea
+                rows={2}
+                value={adminRefundNote}
+                onChange={e => setAdminRefundNote(e.target.value)}
+                placeholder="e.g. Customer reported medical emergency or cinema technical issue. Authorizing exceptional refund."
+                className="w-full bg-cinema-base border border-white/10 rounded-xl p-2.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary/50"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const updated: Booking = {
+                    ...refundReviewTarget,
+                    refundAmount: refundReviewTarget.totalAmount,
+                    refundStatus: 'approved',
+                  };
+                  saveBooking(updated);
+                  saveNotification({
+                    id: `n${Date.now()}_refund`,
+                    userId: refundReviewTarget.userId,
+                    title: 'Refund Override Approved',
+                    message: `Your cancellation for ${refundReviewTarget.movieTitle} was granted an exceptional 100% refund of $${refundReviewTarget.totalAmount.toFixed(2)} by cinema administration.`,
+                    type: 'refund_processed',
+                    read: false,
+                    createdAt: new Date().toISOString(),
+                    status: 'sent',
+                  });
+                  setRefundReviewTarget(null);
+                  setTick(t => t + 1);
+                  toast('success', `Exceptional 100% refund ($${refundReviewTarget.totalAmount.toFixed(2)}) approved for ${refundReviewTarget.id}!`);
+                }}
+                className="text-xs border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10"
+              >
+                Approve 100% Full Refund
+              </Button>
+
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const updated: Booking = {
+                    ...refundReviewTarget,
+                    refundStatus: 'approved',
+                  };
+                  saveBooking(updated);
+                  saveNotification({
+                    id: `n${Date.now()}_credit`,
+                    userId: refundReviewTarget.userId,
+                    title: 'Cinema Credit Voucher Issued',
+                    message: `A full promotional credit voucher for $${refundReviewTarget.totalAmount.toFixed(2)} has been issued for your cancelled screening of ${refundReviewTarget.movieTitle}.`,
+                    type: 'refund_processed',
+                    read: false,
+                    createdAt: new Date().toISOString(),
+                    status: 'sent',
+                  });
+                  setRefundReviewTarget(null);
+                  setTick(t => t + 1);
+                  toast('success', `Cinema credit voucher for $${refundReviewTarget.totalAmount.toFixed(2)} dispatched to user!`);
+                }}
+                className="text-xs border-accent-primary/40 text-accent-primary hover:bg-accent-primary/10"
+              >
+                Issue Credit Voucher
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Share Digital Guest Pass Modal */}
+      <Modal
+        open={!!shareTarget}
+        onClose={() => { setShareTarget(null); setCopiedLink(false); }}
+        title="Share Digital Guest Pass"
+        size="md"
+        footer={
+          <Button variant="ghost" onClick={() => setShareTarget(null)}>Close</Button>
+        }
+      >
+        {shareTarget && (
+          <div className="space-y-4 p-1">
+            <p className="text-xs text-text-secondary">
+              Share an entrance pass and ticket details with a friend so they can join you at the cinema.
+            </p>
+
+            <div className="p-3.5 rounded-xl bg-cinema-base border border-white/10 space-y-1 text-xs">
+              <p className="font-semibold text-text-primary">{shareTarget.movieTitle}</p>
+              <p className="text-text-secondary">{shareTarget.branchName} • {shareTarget.hallName}</p>
+              <p className="text-accent-primary font-mono">{shareTarget.date} at {shareTarget.time} • Seats: {shareTarget.seats.join(', ')}</p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-text-muted mb-1.5">Direct Ticket Link</label>
+              <div className="flex gap-2">
+                <input
+                  readOnly
+                  value={`${window.location.origin}/ticket/${shareTarget.id}?guest=true`}
+                  className="flex-1 bg-cinema-base border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-text-secondary select-all"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/ticket/${shareTarget.id}?guest=true`);
+                    setCopiedLink(true);
+                    toast('success', 'Pass link copied to clipboard!');
+                    setTimeout(() => setCopiedLink(false), 2000);
+                  }}
+                  className="flex items-center gap-1.5"
+                >
+                  {copiedLink ? <Check className="w-3.5 h-3.5 text-black" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedLink ? 'Copied' : 'Copy'}
+                </Button>
+              </div>
+            </div>
+
+            <a
+              href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`🍿 Hey! Here is our CineBook ticket for ${shareTarget.movieTitle} at ${shareTarget.branchName} on ${shareTarget.date} at ${shareTarget.time}. Seats: ${shareTarget.seats.join(', ')}.\nPass Link: ${window.location.origin}/ticket/${shareTarget.id}?guest=true`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors shadow-md"
+            >
+              <Share2 className="w-4 h-4" /> Share via WhatsApp
+            </a>
           </div>
         )}
       </Modal>
