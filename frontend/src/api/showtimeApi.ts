@@ -35,17 +35,19 @@ export const showtimeApi = {
   },
 
   async createShowtime(showtime: Omit<Showtime, 'id'>): Promise<Showtime> {
+    const { id: _, ...payload } = showtime as any;
     const data = await apiClient<any>('/showtimes', {
       method: 'POST',
-      body: JSON.stringify(showtime),
+      body: JSON.stringify(payload),
     });
     return normalizeShowtime(data);
   },
 
   async updateShowtime(id: string, showtime: Omit<Showtime, 'id'>): Promise<Showtime> {
+    const { id: _, ...payload } = showtime as any;
     const data = await apiClient<any>(`/showtimes/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(showtime),
+      body: JSON.stringify(payload),
     });
     return normalizeShowtime(data);
   },

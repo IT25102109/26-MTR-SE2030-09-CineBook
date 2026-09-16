@@ -23,12 +23,12 @@ public class ShowtimeController {
     }
 
     @GetMapping
-    public List<Showtime> getAllShowtimes(@RequestParam(required = false) Long movieId,
-                                          @RequestParam(required = false) Long branchId) {
-        if (movieId != null) {
+    public List<Showtime> getAllShowtimes(@RequestParam(required = false) String movieId,
+                                          @RequestParam(required = false) String branchId) {
+        if (movieId != null && !movieId.isBlank()) {
             return showtimeService.getShowtimesByMovie(movieId);
         }
-        if (branchId != null) {
+        if (branchId != null && !branchId.isBlank()) {
             return showtimeService.getShowtimesByBranch(branchId);
         }
         return showtimeService.getAllShowtimes();
@@ -40,7 +40,7 @@ public class ShowtimeController {
     }
 
     @GetMapping("/movie/{movieId}")
-    public List<Showtime> getShowtimesByMovieId(@PathVariable Long movieId) {
+    public List<Showtime> getShowtimesByMovieId(@PathVariable String movieId) {
         return showtimeService.getShowtimesByMovie(movieId);
     }
 

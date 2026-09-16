@@ -162,48 +162,59 @@ export function getShowtime(id: string): Showtime | undefined {
   return getShowtimes().find(s => s.id === id);
 }
 
-export function saveShowtime(showtime: Showtime): void {
+export async function saveShowtime(showtime: Showtime): Promise<Showtime> {
   const showtimes = getShowtimes();
   const idx = showtimes.findIndex(s => s.id === showtime.id);
   if (idx >= 0) {
     showtimes[idx] = showtime;
-    showtimeApi.updateShowtime(showtime.id, showtime).catch(err =>
-      console.warn('API updateShowtime sync failed, changes kept locally:', err)
-    );
+    write(KEYS.showtimes, showtimes);
+    try {
+      return await showtimeApi.updateShowtime(showtime.id, showtime);
+    } catch (err) {
+      console.warn('API updateShowtime sync failed, changes kept locally:', err);
+      return showtime;
+    }
   } else {
     const localId = showtime.id || `s${Date.now()}`;
     const toSave = { ...showtime, id: localId };
     showtimes.push(toSave);
-    showtimeApi.createShowtime(showtime).then(created => {
+    write(KEYS.showtimes, showtimes);
+    try {
+      const created = await showtimeApi.createShowtime(showtime);
       if (created.id && created.id !== localId) {
         const current = getShowtimes();
         const item = current.find(s => s.id === localId);
         if (item) item.id = created.id;
         write(KEYS.showtimes, current);
       }
-    }).catch(err =>
-      console.warn('API createShowtime sync failed, changes kept locally:', err)
-    );
+      return created;
+    } catch (err) {
+      console.warn('API createShowtime sync failed, changes kept locally:', err);
+      return toSave;
+    }
   }
-  write(KEYS.showtimes, showtimes);
 }
 
-export function deleteShowtime(id: string): void {
+export async function deleteShowtime(id: string): Promise<void> {
   write(KEYS.showtimes, getShowtimes().filter(s => s.id !== id));
-  showtimeApi.deleteShowtime(id).catch(err =>
-    console.warn('API deleteShowtime sync failed, deletion kept locally:', err)
-  );
+  try {
+    await showtimeApi.deleteShowtime(id);
+  } catch (err) {
+    console.warn('API deleteShowtime sync failed, deletion kept locally:', err);
+  }
 }
 
-export function updateShowtimeSeats(showtimeId: string, seats: string[]): void {
+export async function updateShowtimeSeats(showtimeId: string, seats: string[]): Promise<void> {
   const showtimes = getShowtimes();
   const idx = showtimes.findIndex(s => s.id === showtimeId);
   if (idx >= 0) {
     showtimes[idx].bookedSeats = [...showtimes[idx].bookedSeats, ...seats];
     write(KEYS.showtimes, showtimes);
-    showtimeApi.addBookedSeats(showtimeId, seats).catch(err =>
-      console.warn('API addBookedSeats sync failed, changes kept locally:', err)
-    );
+    try {
+      await showtimeApi.addBookedSeats(showtimeId, seats);
+    } catch (err) {
+      console.warn('API addBookedSeats sync failed, changes kept locally:', err);
+    }
   }
 }
 
