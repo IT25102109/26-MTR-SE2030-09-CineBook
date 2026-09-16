@@ -50,9 +50,10 @@ public class BookingService {
         // Update showtime booked seats in Function 3 inventory
         if (booking.getShowtimeId() != null && booking.getSeats() != null && !booking.getSeats().isEmpty()) {
             try {
-                showtimeService.addBookedSeats(booking.getShowtimeId(), booking.getSeats());
+                Long stId = Long.parseLong(booking.getShowtimeId());
+                showtimeService.addBookedSeats(stId, booking.getSeats());
             } catch (Exception e) {
-                // Log and continue if showtime lookup fails
+                // Ignore if showtime ID is non-numeric mock ID or showtime not in DB
             }
         }
 
