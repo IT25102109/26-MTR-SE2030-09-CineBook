@@ -125,3 +125,26 @@ export interface NotificationPreferences {
   price_alert: boolean;
   system_announcement: boolean;
 }
+
+export interface MovieReview {
+  id: string;
+  movieId: string;
+  userId: string;
+  userName: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+  status: 'approved' | 'pending' | 'rejected';
+}
+
+export interface Promotion {
+  id: string;
+  code: string;
+  description: string;
+  discountType: 'percentage' | 'flat';
+  discountValue: number;
+  minSpend: number;
+  validUntil: string;
+  active: boolean;
+}
+
