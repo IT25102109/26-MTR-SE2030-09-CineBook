@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Plus, Search, Trash2, Calendar, Clock, Film, MapPin, Tag, CheckCircle, XCircle, Sparkles, MessageSquare } from 'lucide-react';
+import { Plus, Search, Trash2, Calendar, Clock, Film, MapPin, Tag, CheckCircle, XCircle, Sparkles, MessageSquare, AlertTriangle, Copy, Shield, Lock } from 'lucide-react';
 import { getShowtimes, getMovies, getBranches, saveShowtime, deleteShowtime, getPromotions, savePromotion, deletePromotion, getAllReviewsForModeration, updateReviewStatus } from '@/data/store';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -13,6 +14,7 @@ import type { Showtime, Promotion, MovieReview } from '@/types';
 const times = ['10:00 AM', '1:15 PM', '4:30 PM', '7:00 PM', '10:15 PM'];
 
 export function ManageShowtimesPage() {
+  const { user } = useAuth();
   const { toast } = useToast();
   const [tick, setTick] = useState(0);
 
@@ -22,18 +24,28 @@ export function ManageShowtimesPage() {
   const promotions = useMemo(() => getPromotions(), [tick]);
   const reviews = useMemo(() => getAllReviewsForModeration(), [tick]);
 
+  const isCinemaManager = user?.role === 'cinemaManager';
+  const assignedBranchId = user?.assignedBranchId;
+  const initialBranchId = (isCinemaManager && assignedBranchId) ? assignedBranchId : (branches[0]?.id || '');
+
   const [search, setSearch] = useState('');
   const [movieFilter, setMovieFilter] = useState('all');
-  const [branchFilter, setBranchFilter] = useState('all');
+  const [branchFilter, setBranchFilter] = useState(isCinemaManager && assignedBranchId ? assignedBranchId : 'all');
   const [modalOpen, setModalOpen] = useState(false);
   const [promoModalOpen, setPromoModalOpen] = useState(false);
   const [reviewsModalOpen, setReviewsModalOpen] = useState(false);
+  const [cloneModalOpen, setCloneModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Showtime | null>(null);
+
+  // Bulk clone state
+  const [cloneSourceDate, setCloneSourceDate] = useState(new Date().toISOString().split('T')[0]);
+  const [cloneTargetDays, setCloneTargetDays] = useState(1);
+  const [cloneBranchId, setCloneBranchId] = useState(initialBranchId);
 
   const [formData, setFormData] = useState({
     movieId: movies[0]?.id || '',
-    branchId: branches[0]?.id || '',
-    hallId: branches[0]?.halls[0]?.id || '',
+    branchId: initialBranchId,
+    hallId: branches.find(b => b.id === initialBranchId)?.halls[0]?.id || branches[0]?.halls[0]?.id || '',
     date: new Date().toISOString().split('T')[0],
     time: times[0],
     basePrice: 14.99,
@@ -65,6 +77,90 @@ export function ManageShowtimesPage() {
     return timeStr.includes('7:00 PM') || timeStr.includes('10:15 PM') || timeStr.startsWith('17') || timeStr.startsWith('18') || timeStr.startsWith('19') || timeStr.startsWith('20') || timeStr.startsWith('21') || timeStr.startsWith('22');
   };
 
+  const parseTimeToMinutes = (t: string) => {
+    if (!t) return 0;
+    const isPM = t.toLowerCase().includes('pm');
+    const isAM = t.toLowerCase().includes('am');
+    const clean = t.replace(/(am|pm)/i, '').trim();
+    const [hStr, mStr] = clean.split(':');
+    let h = parseInt(hStr, 10) || 0;
+    const m = parseInt(mStr, 10) || 0;
+    if (isPM && h < 12) h += 12;
+    if (isAM && h === 12) h = 0;
+    return h * 60 + m;
+  };
+
+  const conflictWarning = useMemo(() => {
+    if (!modalOpen || !formData.branchId || !formData.hallId || !formData.date || !formData.time) {
+      return null;
+    }
+    const formMins = parseTimeToMinutes(formData.time);
+    const sameHallShows = showtimes.filter(s =>
+      s.branchId === formData.branchId &&
+      s.hallId === formData.hallId &&
+      s.date === formData.date
+    );
+    for (const existing of sameHallShows) {
+      const existingMins = parseTimeToMinutes(existing.time);
+      if (Math.abs(formMins - existingMins) < 150) { // 2.5h buffer slot
+        const existingMovie = movies.find(m => m.id === existing.movieId);
+        const branchObj = branches.find(b => b.id === existing.branchId);
+        const hallObj = branchObj?.halls.find(h => h.id === existing.hallId);
+        return {
+          existingTime: existing.time,
+          movieTitle: existingMovie?.title || 'Another Movie',
+          hallName: hallObj?.name || 'Selected Hall',
+        };
+      }
+    }
+    return null;
+  }, [modalOpen, formData.branchId, formData.hallId, formData.date, formData.time, showtimes, movies, branches]);
+
+  const handleBulkClone = async () => {
+    const sourceShows = showtimes.filter(s =>
+      s.date === cloneSourceDate &&
+      (!cloneBranchId || cloneBranchId === 'all' || s.branchId === cloneBranchId)
+    );
+
+    if (sourceShows.length === 0) {
+      toast('error', `No scheduled screenings found on ${cloneSourceDate} to clone.`);
+      return;
+    }
+
+    const sourceDateObj = new Date(cloneSourceDate + 'T00:00:00');
+    let clonedCount = 0;
+
+    for (let dayOffset = 1; dayOffset <= cloneTargetDays; dayOffset++) {
+      const targetDateObj = new Date(sourceDateObj);
+      targetDateObj.setDate(targetDateObj.getDate() + dayOffset);
+      const targetDateStr = targetDateObj.toISOString().split('T')[0];
+
+      for (const s of sourceShows) {
+        const newShow: Showtime = {
+          id: '',
+          movieId: s.movieId,
+          branchId: s.branchId,
+          hallId: s.hallId,
+          hallName: s.hallName,
+          date: targetDateStr,
+          time: s.time,
+          basePrice: s.basePrice,
+          premiumPrice: s.premiumPrice,
+          bookedSeats: [],
+        };
+        try {
+          await saveShowtime(newShow);
+          clonedCount++;
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    setCloneModalOpen(false);
+    setTick(t => t + 1);
+    toast('success', `Successfully cloned ${clonedCount} showtime(s) across next ${cloneTargetDays} day(s)!`);
+  };
 
   const filtered = showtimes.filter(s => {
     if (movieFilter !== 'all' && s.movieId !== movieFilter) return false;
@@ -88,6 +184,10 @@ export function ManageShowtimesPage() {
   const handleSave = async () => {
     if (!formData.movieId || !formData.branchId || !formData.hallId) {
       toast('error', 'Please select a movie, branch, and hall');
+      return;
+    }
+    if (conflictWarning) {
+      toast('error', `Scheduling Conflict: Hall is already occupied by "${conflictWarning.movieTitle}" at ${conflictWarning.existingTime}`);
       return;
     }
     const showtime: Showtime = {
@@ -123,10 +223,20 @@ export function ManageShowtimesPage() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold mb-2">Manage Showtimes</h1>
-          <p className="text-text-secondary">Schedule and manage movie showtimes, dynamic pricing, and promo campaigns</p>
+          <div className="flex items-center gap-2 mb-1">
+            <h1 className="text-3xl font-display font-bold">Manage Showtimes</h1>
+            {isCinemaManager && assignedBranchId && (
+              <Badge variant="blue" className="flex items-center gap-1 text-xs">
+                <Shield className="w-3 h-3" /> Branch Manager Scoped
+              </Badge>
+            )}
+          </div>
+          <p className="text-text-secondary">Schedule and manage movie showtimes, conflict detection, and promo campaigns</p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" onClick={() => setCloneModalOpen(true)} className="flex items-center gap-1.5">
+            <Copy className="w-4 h-4" /> Bulk Clone
+          </Button>
           <Button variant="outline" onClick={() => setReviewsModalOpen(true)} className="flex items-center gap-1.5">
             <MessageSquare className="w-4 h-4" /> Moderation ({reviews.length})
           </Button>
@@ -155,9 +265,17 @@ export function ManageShowtimesPage() {
             <option value="all">All Movies</option>
             {movies.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
           </Select>
-          <Select value={branchFilter} onChange={e => setBranchFilter(e.target.value)}>
-            <option value="all">All Branches</option>
-            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          <Select
+            value={branchFilter}
+            onChange={e => !isCinemaManager && setBranchFilter(e.target.value)}
+            disabled={isCinemaManager && !!assignedBranchId}
+          >
+            {!isCinemaManager && <option value="all">All Branches</option>}
+            {branches.map(b => (
+              <option key={b.id} value={b.id}>
+                {b.name} {isCinemaManager && b.id === assignedBranchId ? '(Your Branch)' : ''}
+              </option>
+            ))}
           </Select>
         </div>
       </Card>
@@ -266,11 +384,27 @@ export function ManageShowtimesPage() {
         footer={
           <>
             <Button variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave}>Add Showtime</Button>
+            <Button onClick={handleSave} disabled={!!conflictWarning}>
+              {conflictWarning ? 'Cannot Add (Conflict)' : 'Add Showtime'}
+            </Button>
           </>
         }
       >
         <div className="space-y-4">
+          {/* Conflict Warning Banner */}
+          {conflictWarning && (
+            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-amber-300">Scheduling Conflict Detected!</p>
+                <p className="text-text-secondary mt-0.5 leading-relaxed">
+                  "{conflictWarning.movieTitle}" is already scheduled in {conflictWarning.hallName} at {conflictWarning.existingTime}.
+                  Cinema halls require a 2.5h turnaround slot to prevent overlapping screenings.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Dynamic Pricing Live Banner */}
           <div className="p-3 rounded-xl bg-cinema-card hairline border border-accent-primary/20 flex items-center justify-between text-xs">
             <div className="flex items-center gap-2">
@@ -294,9 +428,14 @@ export function ManageShowtimesPage() {
           <Select
             label="Branch"
             value={formData.branchId}
+            disabled={isCinemaManager && !!assignedBranchId}
             onChange={e => setFormData({ ...formData, branchId: e.target.value, hallId: branches.find(b => b.id === e.target.value)?.halls[0]?.id || '' })}
           >
-            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            {branches.map(b => (
+              <option key={b.id} value={b.id}>
+                {b.name} {isCinemaManager && b.id === assignedBranchId ? '(Assigned to you)' : ''}
+              </option>
+            ))}
           </Select>
           <Select label="Hall" value={formData.hallId} onChange={e => setFormData({ ...formData, hallId: e.target.value })}>
             {availableHalls.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
@@ -483,6 +622,75 @@ export function ManageShowtimesPage() {
               })}
             </div>
           )}
+        </div>
+      </Modal>
+
+      {/* Bulk Clone Schedule Modal */}
+      <Modal
+        open={cloneModalOpen}
+        onClose={() => setCloneModalOpen(false)}
+        title="Bulk Clone Showtimes Schedule"
+        size="md"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setCloneModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleBulkClone} className="flex items-center gap-1.5">
+              <Copy className="w-4 h-4" /> Clone Schedule
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-text-secondary">
+            Duplicate a full day's scheduled screenings across future dates in one click. Great for rolling forward recurring schedules to the coming days or whole week.
+          </p>
+
+          <Select
+            label="Branch"
+            value={cloneBranchId}
+            disabled={isCinemaManager && !!assignedBranchId}
+            onChange={e => setCloneBranchId(e.target.value)}
+          >
+            {!isCinemaManager && <option value="all">All Cinema Branches</option>}
+            {branches.map(b => (
+              <option key={b.id} value={b.id}>
+                {b.name} {isCinemaManager && b.id === assignedBranchId ? '(Your Branch)' : ''}
+              </option>
+            ))}
+          </Select>
+
+          <Input
+            label="Source Schedule Date (Copy from)"
+            type="date"
+            value={cloneSourceDate}
+            onChange={e => setCloneSourceDate(e.target.value)}
+          />
+
+          <div>
+            <label className="block text-sm font-medium text-text-secondary mb-1.5">
+              Replicate to Next
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { days: 1, label: '1 Day (Tomorrow)' },
+                { days: 3, label: '3 Days' },
+                { days: 7, label: '7 Days (Whole Week)' },
+              ].map(opt => (
+                <button
+                  key={opt.days}
+                  type="button"
+                  onClick={() => setCloneTargetDays(opt.days)}
+                  className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all ${
+                    cloneTargetDays === opt.days
+                      ? 'bg-accent-primary text-white border-accent-primary shadow-md shadow-accent-primary/20'
+                      : 'bg-cinema-base text-text-secondary border-white/10 hover:border-white/20'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </Modal>
 

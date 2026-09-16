@@ -66,6 +66,7 @@ public class ShowtimeService {
     }
 
     public Showtime createShowtime(Showtime showtime) {
+        validateNoSchedulingConflict(showtime, null);
         if (showtime.getBasePrice() > 0 && showtime.getDate() != null && showtime.getTime() != null) {
             double dynamicBase = calculateDynamicPrice(showtime.getBasePrice(), showtime.getDate(), showtime.getTime());
             showtime.setBasePrice(dynamicBase);
@@ -77,6 +78,7 @@ public class ShowtimeService {
     }
 
     public Showtime updateShowtime(Long id, Showtime updated) {
+        validateNoSchedulingConflict(updated, id);
         Showtime existing = getShowtimeById(id);
         existing.setMovieId(updated.getMovieId());
         existing.setBranchId(updated.getBranchId());
@@ -88,6 +90,51 @@ public class ShowtimeService {
         existing.setPremiumPrice(updated.getPremiumPrice());
         existing.setBookedSeats(updated.getBookedSeats());
         return showtimeRepository.save(existing);
+    }
+
+    /**
+     * Conflict Detection Engine (Phase 3 - Function 2):
+     * Ensures no two showtimes overlap in the same cinema hall on the same date.
+     * Enforces a minimum 2.5-hour duration buffer (screening + turnaround/cleaning).
+     */
+    public void validateNoSchedulingConflict(Showtime showtime, Long excludeId) {
+        if (showtime.getBranchId() == null || showtime.getHallId() == null ||
+            showtime.getDate() == null || showtime.getTime() == null) {
+            return;
+        }
+
+        List<Showtime> sameHallShowtimes = showtimeRepository.findByBranchIdAndHallIdAndDate(
+                showtime.getBranchId(), showtime.getHallId(), showtime.getDate());
+
+        int proposedMinutes = parseTimeToMinutes(showtime.getTime());
+        int defaultDurationAndBuffer = 150; // 2h movie + 30m cleaning/buffer
+
+        for (Showtime existing : sameHallShowtimes) {
+            if (excludeId != null && excludeId.equals(existing.getId())) {
+                continue;
+            }
+            int existingMinutes = parseTimeToMinutes(existing.getTime());
+            if (Math.abs(proposedMinutes - existingMinutes) < defaultDurationAndBuffer) {
+                String hallLabel = existing.getHallName() != null ? existing.getHallName() : "Selected Hall";
+                throw new IllegalArgumentException(String.format(
+                    "Scheduling conflict in %s: Existing screening at %s overlaps with proposed time %s (requires 2.5h slot including turnaround).",
+                    hallLabel,
+                    existing.getTime(),
+                    showtime.getTime()
+                ));
+            }
+        }
+    }
+
+    private int parseTimeToMinutes(String timeStr) {
+        try {
+            String[] parts = timeStr.trim().split(":");
+            int hours = Integer.parseInt(parts[0]);
+            int mins = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
+            return hours * 60 + mins;
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     public Showtime addBookedSeats(Long id, List<String> newSeats) {

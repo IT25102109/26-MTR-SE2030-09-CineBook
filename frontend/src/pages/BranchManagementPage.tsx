@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Plus, Edit2, Trash2, Building2, MapPin, Film } from 'lucide-react';
+import { Plus, Edit2, Trash2, Building2, MapPin, Film, Shield, Lock } from 'lucide-react';
 import { getBranches, saveBranch, deleteBranch } from '@/data/store';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -11,9 +12,14 @@ import { Table } from '@/components/ui/Table';
 import type { Branch, CinemaHall } from '@/types';
 
 export function BranchManagementPage() {
+  const { user } = useAuth();
   const { toast } = useToast();
   const [tick, setTick] = useState(0);
   const branches = useMemo(() => getBranches(), [tick]);
+
+  const isCinemaManager = user?.role === 'cinemaManager';
+  const assignedBranchId = user?.assignedBranchId;
+  const isAdmin = user?.role === 'admin';
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Branch | null>(null);
@@ -82,51 +88,102 @@ export function BranchManagementPage() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-display font-bold mb-2">Branch Management</h1>
-          <p className="text-text-secondary">Manage cinema branches and their halls</p>
+          <div className="flex items-center gap-2 mb-1">
+            <h1 className="text-3xl font-display font-bold">Branch Management</h1>
+            {isCinemaManager && (
+              <Badge variant="blue" className="flex items-center gap-1 text-xs">
+                <Shield className="w-3 h-3" /> Manager Mode: Scoped
+              </Badge>
+            )}
+          </div>
+          <p className="text-text-secondary">
+            {isCinemaManager
+              ? 'Manage screens, seating configurations and halls for your assigned cinema branch'
+              : 'Configure nationwide cinema branch venues, screening halls, and seat layouts'}
+          </p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="w-4 h-4" /> Add Branch
-        </Button>
+        {isAdmin && (
+          <Button onClick={openCreate}>
+            <Plus className="w-4 h-4" /> Add Branch
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-6">
-        {branches.map((branch, i) => (
-          <Card key={branch.id} className="p-6 animate-fade-in-up group" hover>
-            <div style={{ animationDelay: `${i * 0.1}s`, opacity: 0 }}>
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent-primary/20 to-accent-primary/5 flex items-center justify-center">
-                  <Building2 className="w-6 h-6 text-accent-primary" />
+        {branches.map((branch, i) => {
+          const isAssigned = !assignedBranchId || branch.id === assignedBranchId;
+          const canManage = isAdmin || (isCinemaManager && isAssigned);
+
+          return (
+            <Card key={branch.id} className={`p-6 animate-fade-in-up group transition-all ${!canManage ? 'opacity-60 border-white/5' : ''}`} hover={canManage}>
+              <div style={{ animationDelay: `${i * 0.1}s` }}>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent-primary/20 to-accent-primary/5 flex items-center justify-center">
+                    <Building2 className="w-6 h-6 text-accent-primary" />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {isCinemaManager && isAssigned && (
+                      <Badge variant="green" className="text-xs">
+                        Your Branch
+                      </Badge>
+                    )}
+                    {isCinemaManager && !isAssigned && (
+                      <Badge variant="default" className="text-xs text-text-muted flex items-center gap-1">
+                        <Lock className="w-3 h-3" /> Read Only
+                      </Badge>
+                    )}
+                    {canManage && (
+                      <button
+                        onClick={() => openEdit(branch)}
+                        title="Edit Branch Layout"
+                        className="p-2 rounded-lg hover:bg-white/5 text-text-secondary hover:text-accent-primary transition-colors"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <button
+                        onClick={() => setDeleteTarget(branch)}
+                        title="Delete Branch"
+                        className="p-2 rounded-lg hover:bg-white/5 text-text-secondary hover:text-accent-destructive transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => openEdit(branch)} className="p-2 rounded-lg hover:bg-white/5 text-text-secondary hover:text-accent-primary transition-colors">
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => setDeleteTarget(branch)} className="p-2 rounded-lg hover:bg-white/5 text-text-secondary hover:text-accent-destructive transition-colors">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                <h3 className="font-display font-semibold text-lg mb-1">{branch.name}</h3>
+                <p className="text-sm text-text-secondary flex items-center gap-1.5 mb-3">
+                  <MapPin className="w-3.5 h-3.5" /> {branch.city}
+                </p>
+                <p className="text-xs text-text-muted mb-4">{branch.address}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant="blue"><Film className="w-3 h-3" /> {branch.halls.length} Halls</Badge>
+                  <Badge variant="default">
+                    {branch.halls.reduce((sum, h) => sum + h.rows * h.seatsPerRow, 0)} seats total
+                  </Badge>
                 </div>
               </div>
-              <h3 className="font-display font-semibold text-lg mb-1">{branch.name}</h3>
-              <p className="text-sm text-text-secondary flex items-center gap-1.5 mb-3">
-                <MapPin className="w-3.5 h-3.5" /> {branch.city}
-              </p>
-              <p className="text-xs text-text-muted mb-4">{branch.address}</p>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant="blue"><Film className="w-3 h-3" /> {branch.halls.length} Halls</Badge>
-                <Badge variant="default">
-                  {branch.halls.reduce((sum, h) => sum + h.rows * h.seatsPerRow, 0)} seats total
-                </Badge>
-              </div>
-            </div>
-          </Card>
-        ))}
+            </Card>
+          );
+        })}
       </div>
 
       <h2 className="text-xl font-display font-semibold mb-4 mt-8">All Branches</h2>
       <Table
         columns={[
-          { key: 'name', header: 'Branch Name', render: b => <span className="font-medium">{b.name}</span> },
+          {
+            key: 'name',
+            header: 'Branch Name',
+            render: b => (
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{b.name}</span>
+                {isCinemaManager && b.id === assignedBranchId && (
+                  <Badge variant="green" className="text-[10px] py-0 px-1.5">Assigned</Badge>
+                )}
+              </div>
+            )
+          },
           { key: 'city', header: 'City', render: b => <span className="text-text-secondary">{b.city}</span> },
           { key: 'address', header: 'Address', render: b => <span className="text-text-secondary text-xs">{b.address}</span> },
           {
@@ -142,16 +199,27 @@ export function BranchManagementPage() {
           {
             key: 'actions',
             header: '',
-            render: (b) => (
-              <div className="flex gap-2">
-                <button onClick={() => openEdit(b)} className="text-text-muted hover:text-accent-primary transition-colors p-1">
-                  <Edit2 className="w-4 h-4" />
-                </button>
-                <button onClick={() => setDeleteTarget(b)} className="text-text-muted hover:text-accent-destructive transition-colors p-1">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ),
+            render: (b) => {
+              const isAssigned = !assignedBranchId || b.id === assignedBranchId;
+              const canManage = isAdmin || (isCinemaManager && isAssigned);
+
+              if (!canManage) {
+                return <span className="text-xs text-text-muted italic flex items-center gap-1"><Lock className="w-3 h-3" /> Locked</span>;
+              }
+
+              return (
+                <div className="flex gap-2">
+                  <button onClick={() => openEdit(b)} title="Edit" className="text-text-muted hover:text-accent-primary transition-colors p-1">
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  {isAdmin && (
+                    <button onClick={() => setDeleteTarget(b)} title="Delete" className="text-text-muted hover:text-accent-destructive transition-colors p-1">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              );
+            },
           },
         ]}
         data={branches}
