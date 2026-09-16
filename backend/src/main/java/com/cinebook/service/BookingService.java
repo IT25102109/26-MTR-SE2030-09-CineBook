@@ -47,11 +47,13 @@ public class BookingService {
         // Persist booking record
         Booking saved = bookingRepository.save(booking);
 
-        // Update showtime booked seats in Function 3 inventory
+        // Update showtime booked seats in Function 3 inventory with pessimistic concurrency lock
         if (booking.getShowtimeId() != null && booking.getSeats() != null && !booking.getSeats().isEmpty()) {
             try {
                 Long stId = Long.parseLong(booking.getShowtimeId());
-                showtimeService.addBookedSeats(stId, booking.getSeats());
+                showtimeService.reserveSeatsWithPessimisticLock(stId, booking.getSeats());
+            } catch (IllegalStateException e) {
+                throw e; // Re-throw concurrency conflict
             } catch (Exception e) {
                 // Ignore if showtime ID is non-numeric mock ID or showtime not in DB
             }

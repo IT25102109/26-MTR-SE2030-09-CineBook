@@ -163,6 +163,31 @@ public class ShowtimeService {
         return existing;
     }
 
+    /**
+     * Concurrency & Pessimistic Write Lock Engine (Phase 3 - Function 3: IT25101943).
+     * Locks the target Showtime record in the database using SELECT ... FOR UPDATE.
+     * Guarantees atomic verification that none of the requested seats are already taken.
+     */
+    public Showtime reserveSeatsWithPessimisticLock(Long showtimeId, List<String> requestedSeats) {
+        Showtime showtime = showtimeRepository.findByIdWithLock(showtimeId)
+                .orElseThrow(() -> new RuntimeException("Showtime not found: " + showtimeId));
+
+        List<String> current = showtime.getBookedSeats();
+        if (current == null) {
+            current = new ArrayList<>();
+        }
+
+        for (String seat : requestedSeats) {
+            if (current.contains(seat)) {
+                throw new IllegalStateException("Concurrency conflict: Seat " + seat + " was just booked by another customer.");
+            }
+        }
+
+        current.addAll(requestedSeats);
+        showtime.setBookedSeats(current);
+        return showtimeRepository.save(showtime);
+    }
+
     public void deleteShowtime(Long id) {
         showtimeRepository.deleteById(id);
     }

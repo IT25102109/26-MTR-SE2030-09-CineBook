@@ -1,11 +1,12 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ChevronLeft, Armchair, Info, Timer, Users, Accessibility, AlertTriangle, RefreshCw } from 'lucide-react';
-import { getShowtime, getMovie, getBranch, getHall, updateShowtimeSeats } from '@/data/store';
+import { ChevronLeft, Armchair, Info, Timer, Users, Accessibility, AlertTriangle, RefreshCw, Bell, ShieldCheck, CheckCircle2, Lock } from 'lucide-react';
+import { getShowtime, getMovie, getBranch, getHall, updateShowtimeSeats, joinWaitlist, getWaitlist } from '@/data/store';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
+import { Input } from '@/components/ui/Input';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 
@@ -26,6 +27,13 @@ export function SeatSelectionPage() {
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [timeLeft, setTimeLeft] = useState<number>(HOLD_DURATION);
   const [timerExpired, setTimerExpired] = useState(false);
+
+  // Waitlist state
+  const [waitlistModalOpen, setWaitlistModalOpen] = useState(false);
+  const [waitlistEmail, setWaitlistEmail] = useState(user?.email || '');
+  const [waitlistName, setWaitlistName] = useState(user?.name || '');
+  const [waitlistSuccess, setWaitlistSuccess] = useState(false);
+  const [waitlistCount, setWaitlistCount] = useState(() => showtime ? getWaitlist(showtime.id).length : 0);
 
   // Seat hold countdown timer (Function 3: Concurrency protection)
   useEffect(() => {
@@ -125,6 +133,33 @@ export function SeatSelectionPage() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const totalSeats = hall ? hall.rows * hall.seatsPerRow : 0;
+  const bookedCount = showtime ? showtime.bookedSeats.length : 0;
+  const availableCount = Math.max(0, totalSeats - bookedCount);
+  const occupancyRate = totalSeats > 0 ? Math.round((bookedCount / totalSeats) * 100) : 0;
+  const isSoldOut = availableCount === 0;
+
+  const handleJoinWaitlist = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!waitlistEmail || !waitlistEmail.includes('@')) {
+      toast('error', 'Please enter a valid email address');
+      return;
+    }
+    const success = joinWaitlist(showtime.id, {
+      id: user?.id || `guest_${Date.now()}`,
+      name: waitlistName || 'Guest User',
+      email: waitlistEmail,
+    });
+    if (success) {
+      setWaitlistSuccess(true);
+      setWaitlistCount(c => c + 1);
+      toast('success', 'You have been added to the priority waitlist!');
+    } else {
+      setWaitlistSuccess(true);
+      toast('info', 'You are already on the waitlist for this screening.');
+    }
+  };
+
   const handleProceed = () => {
     if (!user) {
       toast('info', 'Please sign in to continue booking');
@@ -145,25 +180,80 @@ export function SeatSelectionPage() {
     });
   };
 
-
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <Link to={`/movies/${movie.id}`} className="inline-flex items-center gap-1 text-sm text-text-secondary hover:text-accent-primary transition-colors mb-6">
         <ChevronLeft className="w-4 h-4" /> Back to {movie.title}
       </Link>
 
-      <div className="mb-8">
-        <h1 className="text-3xl font-display font-bold mb-2">{movie.title}</h1>
-        <div className="flex items-center gap-3 text-sm text-text-secondary flex-wrap">
-          <span>{branch.name}</span>
-          <span className="text-text-muted">•</span>
-          <span>{hall.name}</span>
-          <span className="text-text-muted">•</span>
-          <span>{new Date(showtime.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</span>
-          <span className="text-text-muted">•</span>
-          <span>{showtime.time}</span>
+      <div className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-display font-bold mb-2">{movie.title}</h1>
+          <div className="flex items-center gap-3 text-sm text-text-secondary flex-wrap">
+            <span>{branch.name}</span>
+            <span className="text-text-muted">•</span>
+            <span>{hall.name}</span>
+            <span className="text-text-muted">•</span>
+            <span>{new Date(showtime.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</span>
+            <span className="text-text-muted">•</span>
+            <span>{showtime.time}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge variant="green" className="flex items-center gap-1 text-xs py-1">
+            <ShieldCheck className="w-3.5 h-3.5" /> Pessimistic Lock Protected
+          </Badge>
+          <button
+            type="button"
+            onClick={() => setWaitlistModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-cinema-card border border-white/10 hover:border-accent-primary/40 text-text-secondary hover:text-white transition-all"
+          >
+            <Bell className="w-3 h-3 text-accent-primary" /> Waitlist ({waitlistCount})
+          </button>
         </div>
       </div>
+
+      {/* Real-time Hall Capacity & Occupancy Meter */}
+      <div className="p-3.5 rounded-xl bg-cinema-card hairline mb-6">
+        <div className="flex items-center justify-between text-xs mb-2">
+          <span className="text-text-secondary font-medium">
+            Hall Occupancy: <span className="text-text-primary font-bold">{bookedCount} of {totalSeats} seats booked</span> ({availableCount} remaining)
+          </span>
+          <span className={`font-semibold ${occupancyRate >= 90 ? 'text-red-400' : occupancyRate >= 60 ? 'text-amber-400' : 'text-emerald-400'}`}>
+            {occupancyRate}% Filled
+          </span>
+        </div>
+        <div className="w-full h-2 bg-cinema-base rounded-full overflow-hidden">
+          <div
+            className={`h-full transition-all duration-500 rounded-full ${
+              occupancyRate >= 90
+                ? 'bg-gradient-to-r from-amber-500 to-red-500'
+                : occupancyRate >= 60
+                ? 'bg-gradient-to-r from-blue-500 to-amber-500'
+                : 'bg-emerald-500'
+            }`}
+            style={{ width: `${occupancyRate}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Sold-out Alert Banner */}
+      {isSoldOut && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-red-500/15 via-red-500/10 to-amber-500/10 border border-red-500/30 mb-8 flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center flex-shrink-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-display font-bold text-white">This Screening is 100% Sold Out</h3>
+              <p className="text-xs text-text-secondary">All {totalSeats} seats are booked. Join the priority waitlist to get alerted if seats free up from cancellations.</p>
+            </div>
+          </div>
+          <Button onClick={() => setWaitlistModalOpen(true)} className="flex items-center gap-2 bg-accent-primary text-black hover:bg-accent-secondary">
+            <Bell className="w-4 h-4" /> Join Priority Waitlist ({waitlistCount})
+          </Button>
+        </div>
+      )}
 
       {/* 5-Minute Concurrency Hold Timer & Group Assistant Banner */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
@@ -365,6 +455,81 @@ export function SeatSelectionPage() {
             Your 5-minute seat hold has expired. To maintain fair seat availability under concurrent traffic, your temporary lock has been released.
           </p>
         </div>
+      </Modal>
+
+      {/* Priority Waitlist Modal */}
+      <Modal
+        open={waitlistModalOpen}
+        onClose={() => { setWaitlistModalOpen(false); setWaitlistSuccess(false); }}
+        title="Join Priority Waitlist"
+        size="md"
+        footer={
+          waitlistSuccess ? (
+            <Button onClick={() => { setWaitlistModalOpen(false); setWaitlistSuccess(false); }} className="w-full">
+              Done
+            </Button>
+          ) : undefined
+        }
+      >
+        {waitlistSuccess ? (
+          <div className="text-center py-6">
+            <div className="w-14 h-14 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle2 className="w-7 h-7" />
+            </div>
+            <h3 className="text-lg font-display font-bold mb-1 text-white">You're on the Priority Waitlist!</h3>
+            <p className="text-sm text-text-secondary max-w-sm mx-auto mb-4">
+              If a customer cancels their booking or seat holds expire, seats will be held for you and an alert dispatched to <span className="text-white font-medium">{waitlistEmail}</span>.
+            </p>
+            <Badge variant="green" className="text-xs">
+              Position #{waitlistCount} in queue
+            </Badge>
+          </div>
+        ) : (
+          <form onSubmit={handleJoinWaitlist} className="space-y-4">
+            <p className="text-sm text-text-secondary">
+              Enter your contact details below. When tickets free up from cancellations, you'll receive an instant notification with an exclusive 15-minute booking window.
+            </p>
+            <div className="p-3.5 rounded-xl bg-cinema-base border border-white/10 space-y-1.5 text-xs">
+              <div className="flex justify-between">
+                <span className="text-text-muted">Movie:</span>
+                <span className="font-semibold text-text-primary">{movie.title}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-text-muted">Cinema:</span>
+                <span className="text-text-secondary">{branch.name} • {hall.name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-text-muted">Showtime:</span>
+                <span className="text-accent-primary font-medium">{showtime.date} at {showtime.time}</span>
+              </div>
+            </div>
+
+            <Input
+              label="Your Full Name"
+              value={waitlistName}
+              onChange={e => setWaitlistName(e.target.value)}
+              placeholder="e.g. Alex Silva"
+              required
+            />
+            <Input
+              label="Notification Email Address"
+              type="email"
+              value={waitlistEmail}
+              onChange={e => setWaitlistEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
+            />
+
+            <div className="pt-2 flex justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={() => setWaitlistModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" className="flex items-center gap-2">
+                <Bell className="w-4 h-4" /> Confirm & Join Waitlist
+              </Button>
+            </div>
+          </form>
+        )}
       </Modal>
     </div>
   );
