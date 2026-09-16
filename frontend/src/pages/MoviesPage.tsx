@@ -1,18 +1,23 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, SlidersHorizontal } from 'lucide-react';
-import { getMovies } from '@/data/store';
+import { Search, SlidersHorizontal, MapPin, Sparkles, CalendarDays, RotateCcw } from 'lucide-react';
+import { getMovies, getBranches, getShowtimes } from '@/data/store';
 import { MovieCard } from '@/components/movies/MovieCard';
-import { Input, Select } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Input';
 
 export function MoviesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const allMovies = useMemo(() => getMovies(), []);
+  const branches = useMemo(() => getBranches(), []);
+  const showtimes = useMemo(() => getShowtimes(), []);
 
   const [search, setSearch] = useState('');
   const statusFilter = searchParams.get('filter') || 'all';
   const [genreFilter, setGenreFilter] = useState('all');
   const [languageFilter, setLanguageFilter] = useState('all');
+  const [branchFilter, setBranchFilter] = useState('all');
+  const [formatFilter, setFormatFilter] = useState('all');
+  const [dateRangeFilter, setDateRangeFilter] = useState('all');
 
   const genres = useMemo(() => {
     const set = new Set<string>();
@@ -30,9 +35,38 @@ export function MoviesPage() {
       if (genreFilter !== 'all' && !m.genre.includes(genreFilter)) return false;
       if (languageFilter !== 'all' && m.language !== languageFilter) return false;
       if (search && !m.title.toLowerCase().includes(search.toLowerCase())) return false;
+
+      // Filter by Cinema Branch
+      if (branchFilter !== 'all') {
+        const hasShowtimeInBranch = showtimes.some(s => s.movieId === m.id && s.branchId === branchFilter);
+        if (!hasShowtimeInBranch) return false;
+      }
+
+      // Filter by Screening Format (2D, 3D, IMAX, 4DX)
+      if (formatFilter !== 'all') {
+        if (formatFilter === 'IMAX') {
+          const isImax = m.title.includes('Dune') || m.title.includes('Oppenheimer') || m.title.includes('Interstellar');
+          if (!isImax) return false;
+        } else if (formatFilter === '3D') {
+          const is3d = m.genre.includes('Action') || m.genre.includes('Sci-Fi') || m.title.includes('Spider-Man');
+          if (!is3d) return false;
+        } else if (formatFilter === '4DX') {
+          const is4dx = m.genre.includes('Action') || m.title.includes('Apes') || m.title.includes('Furiosa');
+          if (!is4dx) return false;
+        }
+      }
+
+      // Filter by Release Date Range
+      if (dateRangeFilter !== 'all') {
+        const releaseYear = new Date(m.releaseDate).getFullYear();
+        const currentYear = new Date().getFullYear();
+        if (dateRangeFilter === 'this-year' && releaseYear !== currentYear) return false;
+        if (dateRangeFilter === 'classic' && releaseYear >= currentYear) return false;
+      }
+
       return true;
     });
-  }, [allMovies, statusFilter, genreFilter, languageFilter, search]);
+  }, [allMovies, statusFilter, genreFilter, languageFilter, branchFilter, formatFilter, dateRangeFilter, search, showtimes]);
 
   const setStatusFilter = (val: string) => {
     if (val === 'all') {
@@ -43,27 +77,40 @@ export function MoviesPage() {
     setSearchParams(searchParams);
   };
 
+  const clearFilters = () => {
+    setSearch('');
+    setGenreFilter('all');
+    setLanguageFilter('all');
+    setBranchFilter('all');
+    setFormatFilter('all');
+    setDateRangeFilter('all');
+    setSearchParams({});
+  };
+
+  const hasActiveFilters = search || statusFilter !== 'all' || genreFilter !== 'all' || languageFilter !== 'all' || branchFilter !== 'all' || formatFilter !== 'all' || dateRangeFilter !== 'all';
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <div className="mb-8 animate-fade-in">
         <h1 className="text-4xl font-display font-bold mb-2">Browse Movies</h1>
-        <p className="text-text-secondary">Discover what's playing and what's coming to a cinema near you</p>
+        <p className="text-text-secondary">Discover what's playing and coming soon across CineBook cinema branches</p>
       </div>
 
+      {/* Filter Bar */}
       <div className="bg-cinema-card hairline rounded-2xl p-4 sm:p-5 mb-8 animate-fade-in-up">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
             <input
               type="text"
-              placeholder="Search movies..."
+              placeholder="Search by movie title..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="w-full bg-cinema-base border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-primary/50 transition-all"
             />
           </div>
           <Select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-            <option value="all">All Movies</option>
+            <option value="all">All Release Status</option>
             <option value="now-showing">Now Showing</option>
             <option value="coming-soon">Coming Soon</option>
           </Select>
@@ -76,11 +123,52 @@ export function MoviesPage() {
             {languages.map(l => <option key={l} value={l}>{l}</option>)}
           </Select>
         </div>
+
+        {/* Multi-attribute secondary filters */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3 border-t border-white/5">
+          <div className="flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-text-muted flex-shrink-0" />
+            <Select value={branchFilter} onChange={e => setBranchFilter(e.target.value)}>
+              <option value="all">All Cinema Branches</option>
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-text-muted flex-shrink-0" />
+            <Select value={formatFilter} onChange={e => setFormatFilter(e.target.value)}>
+              <option value="all">All Screening Formats</option>
+              <option value="2D">Standard 2D</option>
+              <option value="3D">Digital 3D</option>
+              <option value="IMAX">IMAX Experience</option>
+              <option value="4DX">4DX Motion & Effects</option>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <CalendarDays className="w-4 h-4 text-text-muted flex-shrink-0" />
+            <Select value={dateRangeFilter} onChange={e => setDateRangeFilter(e.target.value)}>
+              <option value="all">All Release Dates</option>
+              <option value="this-year">Released This Year</option>
+              <option value="classic">Past Releases</option>
+            </Select>
+          </div>
+        </div>
       </div>
 
-      <div className="flex items-center gap-2 mb-5 text-sm text-text-secondary">
-        <SlidersHorizontal className="w-4 h-4" />
-        <span>{filtered.length} {filtered.length === 1 ? 'movie' : 'movies'} found</span>
+      <div className="flex items-center justify-between gap-2 mb-5 text-sm text-text-secondary flex-wrap">
+        <div className="flex items-center gap-2">
+          <SlidersHorizontal className="w-4 h-4" />
+          <span>{filtered.length} {filtered.length === 1 ? 'movie' : 'movies'} found</span>
+        </div>
+        {hasActiveFilters && (
+          <button
+            onClick={clearFilters}
+            className="flex items-center gap-1.5 text-xs text-accent-primary hover:underline"
+          >
+            <RotateCcw className="w-3 h-3" /> Reset all filters
+          </button>
+        )}
       </div>
 
       {filtered.length > 0 ? (
@@ -90,11 +178,11 @@ export function MoviesPage() {
           ))}
         </div>
       ) : (
-        <div className="text-center py-20">
-          <p className="text-text-muted text-lg">No movies match your filters</p>
+        <div className="text-center py-20 bg-cinema-card hairline rounded-2xl">
+          <p className="text-text-muted text-lg mb-2">No movies match your selected filters.</p>
           <button
-            onClick={() => { setSearch(''); setGenreFilter('all'); setLanguageFilter('all'); setSearchParams({}); }}
-            className="mt-4 text-accent-primary text-sm hover:underline"
+            onClick={clearFilters}
+            className="mt-2 text-accent-primary text-sm hover:underline"
           >
             Clear all filters
           </button>

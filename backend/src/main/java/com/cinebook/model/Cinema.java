@@ -24,6 +24,31 @@ public class Cinema {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @com.fasterxml.jackson.annotation.JsonProperty("id")
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonSetter("id")
+    public void setJsonId(Object rawId) {
+        if (rawId == null) {
+            this.id = null;
+        } else if (rawId instanceof Number number) {
+            this.id = number.longValue();
+        } else {
+            String s = rawId.toString().trim();
+            if (s.isEmpty() || !s.matches("\\d+")) {
+                this.id = null;
+            } else {
+                this.id = Long.parseLong(s);
+            }
+        }
+    }
+
     @Column(nullable = false)
     private String name;
 

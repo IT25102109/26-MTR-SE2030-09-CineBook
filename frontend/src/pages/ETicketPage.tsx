@@ -1,13 +1,20 @@
-import { useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { CheckCircle2, Calendar, Clock, MapPin, Film, Download, Home } from 'lucide-react';
+import { CheckCircle2, Calendar, Clock, MapPin, Film, Download, Home, ShieldCheck, QrCode, ScanLine, ArrowRight } from 'lucide-react';
 import { getBookings } from '@/data/store';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { Modal } from '@/components/ui/Modal';
 
 export function ETicketPage() {
   const { bookingId } = useParams<{ bookingId: string }>();
   const booking = useMemo(() => getBookings().find(b => b.id === bookingId), [bookingId]);
+
+  const [showScannerModal, setShowScannerModal] = useState(false);
+  const [scanStep, setScanStep] = useState<'scanning' | 'verified'>('scanning');
+  const [isCheckedIn, setIsCheckedIn] = useState(() => {
+    return localStorage.getItem(`cinebook_checkin_${bookingId}`) === 'true';
+  });
 
   const qrPattern = useMemo(() => {
     if (!booking) return [];
@@ -18,6 +25,18 @@ export function ETicketPage() {
     }
     return cells;
   }, [booking]);
+
+  const handleOpenScanner = () => {
+    setShowScannerModal(true);
+    setScanStep('scanning');
+    setTimeout(() => {
+      setScanStep('verified');
+      setIsCheckedIn(true);
+      if (bookingId) {
+        localStorage.setItem(`cinebook_checkin_${bookingId}`, 'true');
+      }
+    }, 1400);
+  };
 
   if (!booking) {
     return (
@@ -34,8 +53,19 @@ export function ETicketPage() {
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-500/10 mb-4">
           <CheckCircle2 className="w-8 h-8 text-emerald-400" />
         </div>
-        <h1 className="text-3xl font-display font-bold mb-2">Booking Confirmed!</h1>
-        <p className="text-text-secondary">Your e-ticket has been generated. Present this at the cinema entrance.</p>
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <h1 className="text-3xl font-display font-bold">Booking Confirmed!</h1>
+          {isCheckedIn ? (
+            <Badge variant="emerald" className="text-xs px-2.5 py-0.5 font-mono">
+              GATE CHECKED-IN
+            </Badge>
+          ) : (
+            <Badge variant="amber" className="text-xs px-2.5 py-0.5 font-mono">
+              VALID TICKET
+            </Badge>
+          )}
+        </div>
+        <p className="text-text-secondary">Your e-ticket has been generated. Present this QR code at the cinema entrance turnstile.</p>
       </div>
 
       <div className="relative animate-scale-in">
@@ -44,9 +74,14 @@ export function ETicketPage() {
           {/* Top section */}
           <div className="p-6 sm:p-8">
             <div className="flex items-start gap-5">
-              <img src={booking.moviePoster} alt={booking.movieTitle} className="w-24 sm:w-28 rounded-xl object-cover" />
+              <img src={booking.moviePoster} alt={booking.movieTitle} className="w-24 sm:w-28 rounded-xl object-cover shadow-md" />
               <div className="flex-1 min-w-0">
-                <h2 className="font-display font-bold text-xl sm:text-2xl mb-2 truncate">{booking.movieTitle}</h2>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <h2 className="font-display font-bold text-xl sm:text-2xl truncate">{booking.movieTitle}</h2>
+                  <div className="flex items-center gap-1 text-[11px] text-emerald-400 font-mono flex-shrink-0 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                    <ShieldCheck className="w-3.5 h-3.5" /> SECURE
+                  </div>
+                </div>
                 <div className="space-y-1.5 text-sm">
                   <div className="flex items-center gap-2 text-text-secondary">
                     <MapPin className="w-4 h-4 text-text-muted flex-shrink-0" />
@@ -79,25 +114,29 @@ export function ETicketPage() {
 
           {/* Bottom section with QR and seats */}
           <div className="p-6 sm:p-8 flex flex-col sm:flex-row gap-6 items-center">
-            {/* QR Code placeholder */}
-            <div className="flex-shrink-0">
-              <div className="w-32 h-32 bg-white rounded-xl p-2.5">
+            {/* QR Code */}
+            <div className="flex-shrink-0 flex flex-col items-center">
+              <div className="w-32 h-32 bg-white rounded-xl p-2.5 shadow-md relative overflow-hidden group">
                 <div className="grid grid-cols-12 gap-px w-full h-full">
                   {qrPattern.map((filled, i) => (
                     <div key={i} className={`rounded-[1px] ${filled ? 'bg-black' : 'bg-white'}`} />
                   ))}
                 </div>
+                <div className="absolute inset-0 border-2 border-dashed border-accent-primary/50 pointer-events-none rounded-xl" />
               </div>
-              <p className="text-center text-xs text-text-muted mt-2">Scan at entrance</p>
+              <p className="text-center text-xs text-text-muted mt-2 font-mono">Scan at Turnstile</p>
             </div>
 
             {/* Seats and info */}
             <div className="flex-1 w-full">
               <div className="mb-4">
-                <p className="text-xs text-text-muted uppercase tracking-wider mb-2">Seats</p>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-text-muted uppercase tracking-wider">Reserved Seats</p>
+                  <span className="text-xs text-text-secondary font-mono">{booking.seats.length} Seat{booking.seats.length > 1 ? 's' : ''}</span>
+                </div>
                 <div className="flex gap-1.5 flex-wrap">
                   {booking.seats.sort().map(seat => (
-                    <Badge key={seat} variant="amber" className="text-sm px-3 py-1">{seat}</Badge>
+                    <Badge key={seat} variant="amber" className="text-sm px-3 py-1 font-mono font-bold">{seat}</Badge>
                   ))}
                 </div>
               </div>
@@ -105,7 +144,7 @@ export function ETicketPage() {
               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5">
                 <div>
                   <p className="text-xs text-text-muted uppercase tracking-wider mb-1">Booking ID</p>
-                  <p className="text-sm font-mono font-medium">{booking.id}</p>
+                  <p className="text-sm font-mono font-semibold text-text-primary">{booking.id}</p>
                 </div>
                 <div>
                   <p className="text-xs text-text-muted uppercase tracking-wider mb-1">Amount Paid</p>
@@ -114,10 +153,83 @@ export function ETicketPage() {
               </div>
             </div>
           </div>
+
+          {/* Turnstile Entry simulation bar */}
+          <div className="bg-white/[0.02] border-t border-white/5 px-6 py-3.5 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs text-text-secondary">
+              <QrCode className="w-4 h-4 text-accent-primary" />
+              <span>Cinema Gate Turnstile Scanner</span>
+            </div>
+            <Button size="sm" variant="outline" onClick={handleOpenScanner} className="text-xs py-1.5 h-auto">
+              <ScanLine className="w-3.5 h-3.5 text-accent-primary" />
+              {isCheckedIn ? 'Re-verify Gate Entry' : 'Simulate Turnstile Scan'}
+            </Button>
+          </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 mt-8 justify-center">
+      {/* Simulator Modal */}
+      <Modal
+        open={showScannerModal}
+        onClose={() => setShowScannerModal(false)}
+        title="Turnstile Check-In Simulator"
+      >
+        <div className="p-4 space-y-6 text-center">
+          {scanStep === 'scanning' ? (
+            <div className="py-8 space-y-4">
+              <div className="w-20 h-20 mx-auto rounded-2xl bg-accent-primary/10 border border-accent-primary/30 flex items-center justify-center relative overflow-hidden">
+                <ScanLine className="w-10 h-10 text-accent-primary animate-pulse" />
+                <div className="absolute inset-x-0 h-1 bg-accent-primary animate-bounce opacity-80" />
+              </div>
+              <h3 className="font-display font-semibold text-lg text-text-primary">Scanning E-Ticket...</h3>
+              <p className="text-xs text-text-muted max-w-sm mx-auto">
+                Verifying cryptographic digital payload with {booking.branchName} access gateway turnstile.
+              </p>
+            </div>
+          ) : (
+            <div className="py-4 space-y-5 animate-fade-in-up">
+              <div className="w-16 h-16 mx-auto rounded-full bg-emerald-500/20 border-2 border-emerald-500 flex items-center justify-center">
+                <CheckCircle2 className="w-9 h-9 text-emerald-400" />
+              </div>
+
+              <div>
+                <Badge variant="emerald" className="mb-2 px-3 py-1 font-mono text-xs">
+                  ENTRY GRANTED • TURNSTILE UNLOCKED
+                </Badge>
+                <h3 className="font-display font-bold text-xl text-text-primary">{booking.movieTitle}</h3>
+                <p className="text-xs text-text-secondary mt-1">
+                  {booking.branchName} • {booking.hallName}
+                </p>
+              </div>
+
+              <div className="bg-cinema-base hairline rounded-xl p-4 text-xs space-y-2 text-left font-mono">
+                <div className="flex justify-between">
+                  <span className="text-text-muted">Turnstile Lane:</span>
+                  <span className="text-text-primary font-bold">Gate 02 (Auditorium Entrance)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-text-muted">Seats Verified:</span>
+                  <span className="text-accent-primary font-bold">{booking.seats.sort().join(', ')}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-text-muted">Timestamp:</span>
+                  <span className="text-text-primary">{new Date().toLocaleTimeString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-text-muted">Verification ID:</span>
+                  <span className="text-emerald-400 truncate max-w-[180px]">SIG-{booking.id.toUpperCase()}-VERIFIED</span>
+                </div>
+              </div>
+
+              <Button fullWidth onClick={() => setShowScannerModal(false)}>
+                Done
+              </Button>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      <div className="flex items-center gap-3 mt-8 justify-center flex-wrap">
         <Button variant="outline" onClick={() => window.print()}>
           <Download className="w-4 h-4" /> Print Ticket
         </Button>
