@@ -27,10 +27,10 @@ public class Showtime {
     private Long id;
 
     @Column(nullable = false)
-    private Long movieId;
+    private String movieId;
 
     @Column(nullable = false)
-    private Long branchId;
+    private String branchId;
 
     private String hallId;
 
@@ -49,6 +49,31 @@ public class Showtime {
     @JsonIgnore
     @Column(length = 2000)
     private String bookedSeatsCsv;
+
+    @JsonProperty("id")
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonSetter("id")
+    public void setJsonId(Object rawId) {
+        if (rawId == null) {
+            this.id = null;
+        } else if (rawId instanceof Number number) {
+            this.id = number.longValue();
+        } else {
+            String s = rawId.toString().trim();
+            if (s.isEmpty() || !s.matches("\\d+")) {
+                this.id = null;
+            } else {
+                this.id = Long.parseLong(s);
+            }
+        }
+    }
 
     @JsonProperty("bookedSeats")
     public List<String> getBookedSeats() {

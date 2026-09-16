@@ -33,11 +33,11 @@ public class ShowtimeService {
                 .orElseThrow(() -> new RuntimeException("Showtime not found with id: " + id));
     }
 
-    public List<Showtime> getShowtimesByMovie(Long movieId) {
+    public List<Showtime> getShowtimesByMovie(String movieId) {
         return showtimeRepository.findByMovieId(movieId);
     }
 
-    public List<Showtime> getShowtimesByBranch(Long branchId) {
+    public List<Showtime> getShowtimesByBranch(String branchId) {
         return showtimeRepository.findByBranchId(branchId);
     }
 

@@ -34,19 +34,19 @@ public class Booking {
     @Column(nullable = false)
     private String userId;
 
-    private Long movieId;
+    private String movieId;
 
     private String movieTitle;
 
     private String moviePoster;
 
-    private Long branchId;
+    private String branchId;
 
     private String branchName;
 
     private String hallName;
 
-    private Long showtimeId;
+    private String showtimeId;
 
     private String date;
 
@@ -68,6 +68,41 @@ public class Booking {
     private String paymentStatus; // "paid" | "refunded"
 
     private LocalDateTime createdAt;
+
+    @JsonProperty("id")
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonSetter("id")
+    public void setJsonId(Object rawId) {
+        if (rawId == null) {
+            this.id = null;
+        } else if (rawId instanceof Number number) {
+            this.id = number.longValue();
+        } else {
+            String s = rawId.toString().trim();
+            if (s.isEmpty() || !s.matches("\\d+")) {
+                this.id = null;
+            } else {
+                this.id = Long.parseLong(s);
+            }
+        }
+    }
+
+    @JsonProperty("bookingDate")
+    public String getBookingDate() {
+        return createdAt != null ? createdAt.toString() : null;
+    }
+
+    @JsonProperty("bookingDate")
+    public void setBookingDate(String dateStr) {
+        // preserve existing or let prePersist initialize
+    }
 
     @JsonProperty("seats")
     public List<String> getSeats() {

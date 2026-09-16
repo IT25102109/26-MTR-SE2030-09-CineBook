@@ -55,7 +55,7 @@ export function ManageShowtimesPage() {
 
   const availableHalls = branches.find(b => b.id === formData.branchId)?.halls || [];
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.movieId || !formData.branchId || !formData.hallId) {
       toast('error', 'Please select a movie, branch, and hall');
       return;
@@ -65,15 +65,25 @@ export function ManageShowtimesPage() {
       ...formData,
       bookedSeats: [],
     };
-    saveShowtime(showtime);
-    setModalOpen(false);
-    setTick(t => t + 1);
-    toast('success', 'Showtime added successfully');
+    try {
+      const saved = await saveShowtime(showtime);
+      setModalOpen(false);
+      setTick(t => t + 1);
+      if (saved.id && !saved.id.startsWith('s')) {
+        toast('success', `Showtime #${saved.id} synced with MySQL database!`);
+      } else {
+        toast('success', 'Showtime added successfully');
+      }
+    } catch {
+      setModalOpen(false);
+      setTick(t => t + 1);
+      toast('info', 'Showtime added locally (backend sync pending)');
+    }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteTarget) return;
-    deleteShowtime(deleteTarget.id);
+    await deleteShowtime(deleteTarget.id);
     setDeleteTarget(null);
     setTick(t => t + 1);
     toast('success', 'Showtime deleted');
