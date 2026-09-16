@@ -69,7 +69,7 @@ echo "📦 Staging changes..."
 git add .
 
 echo "✍️ Committing as: $NAME <$EMAIL>..."
-git commit --author="$NAME <$EMAIL>" -m "$MSG"
+git commit --allow-empty --author="$NAME <$EMAIL>" -m "$MSG"
 
 echo "🚀 Pushing to origin/$BRANCH..."
 git push origin "$BRANCH"
