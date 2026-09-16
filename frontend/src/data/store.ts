@@ -21,16 +21,34 @@ const KEYS = {
 };
 
 export function seedData(): void {
-  if (localStorage.getItem(KEYS.seeded)) return;
-  localStorage.setItem(KEYS.movies, JSON.stringify(mockMovies));
-  localStorage.setItem(KEYS.branches, JSON.stringify(mockBranches));
-  localStorage.setItem(KEYS.showtimes, JSON.stringify(mockShowtimes));
-  localStorage.setItem(KEYS.bookings, JSON.stringify(mockBookings));
-  localStorage.setItem(KEYS.users, JSON.stringify(mockAdminUsers));
-  localStorage.setItem(KEYS.notifications, JSON.stringify(mockNotifications));
-  localStorage.setItem(KEYS.notificationTemplates, JSON.stringify(mockNotificationTemplates));
-  localStorage.setItem(KEYS.reviews, JSON.stringify(mockMovieReviews));
-  localStorage.setItem(KEYS.promotions, JSON.stringify(mockPromotions));
+  const existingMovies = localStorage.getItem(KEYS.movies);
+  if (!existingMovies || JSON.parse(existingMovies).length === 0) {
+    localStorage.setItem(KEYS.movies, JSON.stringify(mockMovies));
+  }
+  if (!localStorage.getItem(KEYS.branches) || JSON.parse(localStorage.getItem(KEYS.branches) || '[]').length === 0) {
+    localStorage.setItem(KEYS.branches, JSON.stringify(mockBranches));
+  }
+  if (!localStorage.getItem(KEYS.showtimes) || JSON.parse(localStorage.getItem(KEYS.showtimes) || '[]').length === 0) {
+    localStorage.setItem(KEYS.showtimes, JSON.stringify(mockShowtimes));
+  }
+  if (!localStorage.getItem(KEYS.bookings)) {
+    localStorage.setItem(KEYS.bookings, JSON.stringify(mockBookings));
+  }
+  if (!localStorage.getItem(KEYS.users)) {
+    localStorage.setItem(KEYS.users, JSON.stringify(mockAdminUsers));
+  }
+  if (!localStorage.getItem(KEYS.notifications)) {
+    localStorage.setItem(KEYS.notifications, JSON.stringify(mockNotifications));
+  }
+  if (!localStorage.getItem(KEYS.notificationTemplates)) {
+    localStorage.setItem(KEYS.notificationTemplates, JSON.stringify(mockNotificationTemplates));
+  }
+  if (!localStorage.getItem(KEYS.reviews)) {
+    localStorage.setItem(KEYS.reviews, JSON.stringify(mockMovieReviews));
+  }
+  if (!localStorage.getItem(KEYS.promotions)) {
+    localStorage.setItem(KEYS.promotions, JSON.stringify(mockPromotions));
+  }
   localStorage.setItem(KEYS.seeded, 'true');
 }
 
@@ -72,7 +90,25 @@ function write<T>(key: string, data: T[]): void {
 
 // Movies
 export function getMovies(): Movie[] {
-  return read<Movie>(KEYS.movies);
+  const list = read<Movie>(KEYS.movies);
+  if (!list || list.length === 0) {
+    write(KEYS.movies, mockMovies);
+    return mockMovies;
+  }
+  return list;
+}
+
+export async function fetchLiveMovies(): Promise<Movie[]> {
+  try {
+    const apiMovies = await movieApi.getMovies();
+    if (apiMovies && apiMovies.length > 0) {
+      write(KEYS.movies, apiMovies);
+      return apiMovies;
+    }
+  } catch (err) {
+    console.warn('Backend /api/movies unreachable, falling back to local cache:', err);
+  }
+  return getMovies();
 }
 
 export function getMovie(id: string): Movie | undefined {

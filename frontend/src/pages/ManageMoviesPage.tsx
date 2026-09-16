@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
-import { Plus, Search, Edit2, Trash2, Film } from 'lucide-react';
-import { getMovies, saveMovie, deleteMovie } from '@/data/store';
+import { useEffect, useState } from 'react';
+import { Plus, Search, Edit2, Trash2, Film, RefreshCw, Database, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { getMovies, saveMovie, deleteMovie, fetchLiveMovies } from '@/data/store';
+import { movieApi } from '@/api/movieApi';
 import { useToast } from '@/contexts/ToastContext';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -29,8 +30,11 @@ const emptyMovie: Omit<Movie, 'id'> = {
 
 export function ManageMoviesPage() {
   const { toast } = useToast();
-  const [tick, setTick] = useState(0);
-  const movies = useMemo(() => getMovies(), [tick]);
+  const [movies, setMovies] = useState<Movie[]>(() => getMovies());
+  const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [backendConnected, setBackendConnected] = useState<boolean | null>(null);
+
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [modalOpen, setModalOpen] = useState(false);
@@ -39,6 +43,38 @@ export function ManageMoviesPage() {
   const [genreInput, setGenreInput] = useState('');
   const [castInput, setCastInput] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Movie | null>(null);
+
+  // Fetch live movies from backend API or local store on mount
+  const loadMovies = async (isManualSync = false) => {
+    if (isManualSync) setSyncing(true);
+    else if (movies.length === 0) setLoading(true);
+
+    try {
+      const liveList = await movieApi.getMovies();
+      if (Array.isArray(liveList)) {
+        setMovies(liveList);
+        setBackendConnected(true);
+        if (isManualSync) {
+          toast('success', `Synced ${liveList.length} movies from MySQL database`);
+        }
+      }
+    } catch (err) {
+      console.warn('Backend API not responding, using local store data:', err);
+      setBackendConnected(false);
+      const fallbackList = getMovies();
+      setMovies(fallbackList);
+      if (isManualSync) {
+        toast('info', 'Backend unreachable. Showing cached/local movies.');
+      }
+    } finally {
+      setLoading(false);
+      setSyncing(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMovies();
+  }, []);
 
   const filtered = movies.filter(m => {
     if (statusFilter !== 'all' && m.status !== statusFilter) return false;
@@ -62,7 +98,7 @@ export function ManageMoviesPage() {
     setModalOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.title.trim()) {
       toast('error', 'Movie title is required');
       return;
@@ -75,37 +111,73 @@ export function ManageMoviesPage() {
     const genres = genreInput.split(',').map(g => g.trim()).filter(Boolean);
     const cast = castInput.split(',').map(c => c.trim()).filter(Boolean);
 
-    const movie: Movie = {
+    const movieToSave: Movie = {
       ...formData,
       genre: genres,
       cast,
       id: editing?.id || '',
     };
 
-    saveMovie(movie);
-    setModalOpen(false);
-    setTick(t => t + 1);
-    toast('success', editing ? 'Movie updated successfully' : 'Movie added successfully');
+    try {
+      saveMovie(movieToSave);
+      setModalOpen(false);
+      toast('success', editing ? 'Movie updated successfully' : 'Movie added successfully');
+      await loadMovies();
+    } catch (err) {
+      console.error('Error saving movie:', err);
+      toast('error', 'Failed to save movie');
+    }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteTarget) return;
-    deleteMovie(deleteTarget.id);
-    setDeleteTarget(null);
-    setTick(t => t + 1);
-    toast('success', 'Movie deleted');
+    try {
+      deleteMovie(deleteTarget.id);
+      setDeleteTarget(null);
+      toast('success', 'Movie deleted');
+      await loadMovies();
+    } catch (err) {
+      console.error('Error deleting movie:', err);
+      toast('error', 'Failed to delete movie');
+    }
   };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-display font-bold mb-2">Manage Movies</h1>
-          <p className="text-text-secondary">Add, edit, and remove movies from the catalog</p>
+          <div className="flex items-center gap-3 mb-1">
+            <h1 className="text-3xl font-display font-bold">Manage Movies</h1>
+            {backendConnected === true && (
+              <Badge variant="green" className="text-xs flex items-center gap-1 font-mono">
+                <Database className="w-3 h-3" /> MySQL Connected
+              </Badge>
+            )}
+            {backendConnected === false && (
+              <Badge variant="amber" className="text-xs flex items-center gap-1 font-mono">
+                <AlertCircle className="w-3 h-3" /> Offline / Local Cache
+              </Badge>
+            )}
+          </div>
+          <p className="text-text-secondary text-sm">Add, edit, and manage movie listings in the catalog</p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="w-4 h-4" /> Add Movie
-        </Button>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadMovies(true)}
+            disabled={syncing}
+            className="text-xs h-9"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Syncing...' : 'Sync Backend'}
+          </Button>
+
+          <Button onClick={openCreate} className="text-xs h-9">
+            <Plus className="w-4 h-4 mr-1" /> Add Movie
+          </Button>
+        </div>
       </div>
 
       <Card className="p-4 mb-6">
@@ -117,53 +189,81 @@ export function ManageMoviesPage() {
               placeholder="Search by title..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full bg-cinema-base border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-accent-primary/50 transition-all"
+              className="w-full bg-cinema-base border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-accent-primary/50 transition-all"
             />
           </div>
           <Select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-            <option value="all">All Status</option>
+            <option value="all">All Status ({movies.length})</option>
             <option value="now-showing">Now Showing</option>
             <option value="coming-soon">Coming Soon</option>
           </Select>
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.map((movie, i) => (
-          <Card key={movie.id} className="p-4 group animate-fade-in-up" >
-            <div className="flex gap-4" style={{ animationDelay: `${i * 0.05}s`, opacity: 0 }}>
-              <img src={movie.poster} alt={movie.title} className="w-20 rounded-lg object-cover flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <h3 className="font-medium text-sm truncate mb-1">{movie.title}</h3>
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Badge variant={movie.status === 'now-showing' ? 'green' : 'blue'}>
-                    {movie.status === 'now-showing' ? 'Showing' : 'Soon'}
-                  </Badge>
-                  {movie.featured && <Badge variant="amber">Featured</Badge>}
-                </div>
-                <p className="text-xs text-text-muted">{movie.genre.join(', ')}</p>
-                <p className="text-xs text-text-muted">{movie.duration}m • {movie.rating}/10</p>
-                <div className="flex gap-2 mt-3">
-                  <button onClick={() => openEdit(movie)} className="flex items-center gap-1 text-xs text-text-secondary hover:text-accent-primary transition-colors">
-                    <Edit2 className="w-3.5 h-3.5" /> Edit
-                  </button>
-                  <button onClick={() => setDeleteTarget(movie)} className="flex items-center gap-1 text-xs text-text-secondary hover:text-accent-destructive transition-colors">
-                    <Trash2 className="w-3.5 h-3.5" /> Delete
-                  </button>
+      {loading ? (
+        <div className="p-16 text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-accent-primary border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-text-muted">Fetching movie records...</p>
+        </div>
+      ) : filtered.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map((movie) => (
+            <Card key={movie.id} className="p-4 group border border-white/5 hover:border-white/10 transition-all">
+              <div className="flex gap-4">
+                <img
+                  src={movie.poster}
+                  alt={movie.title}
+                  className="w-20 h-28 rounded-lg object-cover flex-shrink-0 shadow-md bg-white/5"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
+                />
+                <div className="flex-1 min-w-0 flex flex-col justify-between">
+                  <div>
+                    <h3 className="font-semibold text-sm truncate mb-1 text-text-primary">{movie.title}</h3>
+                    <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+                      <Badge variant={movie.status === 'now-showing' ? 'green' : 'blue'} className="text-[11px]">
+                        {movie.status === 'now-showing' ? 'Showing' : 'Soon'}
+                      </Badge>
+                      {movie.featured && <Badge variant="amber" className="text-[11px]">Featured</Badge>}
+                    </div>
+                    <p className="text-xs text-text-muted truncate">{movie.genre.join(', ')}</p>
+                    <p className="text-xs text-text-muted mt-0.5">{movie.duration}m • ★ {movie.rating}/10</p>
+                  </div>
+
+                  <div className="flex gap-3 mt-3 pt-2 border-t border-white/5">
+                    <button
+                      onClick={() => openEdit(movie)}
+                      className="flex items-center gap-1 text-xs text-text-secondary hover:text-accent-primary transition-colors"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" /> Edit
+                    </button>
+                    <button
+                      onClick={() => setDeleteTarget(movie)}
+                      className="flex items-center gap-1 text-xs text-text-secondary hover:text-accent-destructive transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Delete
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      {filtered.length === 0 && (
+            </Card>
+          ))}
+        </div>
+      ) : (
         <Card className="p-12 text-center">
           <Film className="w-12 h-12 text-text-muted mx-auto mb-4" />
-          <p className="text-text-muted">No movies found</p>
+          <p className="text-base font-medium mb-1">No movies found</p>
+          <p className="text-xs text-text-muted mb-4">
+            {search ? 'Try adjusting your search query.' : 'Get started by adding a movie to your cinema catalog.'}
+          </p>
+          <Button size="sm" onClick={openCreate}>
+            <Plus className="w-4 h-4 mr-1" /> Add Movie
+          </Button>
         </Card>
       )}
 
+      {/* Add / Edit Movie Modal */}
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
@@ -213,6 +313,7 @@ export function ManageMoviesPage() {
         </div>
       </Modal>
 
+      {/* Delete Confirmation Modal */}
       <Modal
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
@@ -226,7 +327,7 @@ export function ManageMoviesPage() {
         }
       >
         <p className="text-sm text-text-secondary">
-          Are you sure you want to delete <span className="font-medium text-text-primary">{deleteTarget?.title}</span>? This action cannot be undone.
+          Are you sure you want to delete <span className="font-medium text-text-primary">{deleteTarget?.title}</span>? This action will remove the movie from the catalog.
         </p>
       </Modal>
     </div>
