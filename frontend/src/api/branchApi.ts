@@ -31,8 +31,9 @@ export const branchApi = {
   },
 
   async createBranch(branch: Omit<Branch, 'id'>): Promise<Branch> {
+    const { id: _, ...rest } = branch as any;
     const payload = {
-      ...branch,
+      ...rest,
       location: branch.city && branch.address ? `${branch.city} - ${branch.address}` : branch.address || branch.city || branch.name,
     };
     const data = await apiClient<any>('/branches', {

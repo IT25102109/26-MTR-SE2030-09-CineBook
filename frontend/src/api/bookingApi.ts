@@ -39,9 +39,10 @@ export const bookingApi = {
   },
 
   async createBooking(booking: Omit<Booking, 'id'>): Promise<Booking> {
+    const { id: _, ...payload } = booking as any;
     const data = await apiClient<any>('/bookings', {
       method: 'POST',
-      body: JSON.stringify(booking),
+      body: JSON.stringify(payload),
     });
     return normalizeBooking(data);
   },

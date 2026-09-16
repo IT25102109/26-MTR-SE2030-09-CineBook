@@ -1,20 +1,35 @@
 import { useMemo, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Star, Clock, Calendar, Film, Play, ChevronLeft, MapPin } from 'lucide-react';
-import { getMovie, getShowtimesByMovie, getBranches, getBranch } from '@/data/store';
+import { Star, Clock, Calendar, Film, Play, ChevronLeft, MapPin, X, MessageSquare, ThumbsUp, Send } from 'lucide-react';
+import { getMovie, getShowtimesByMovie, getBranches, getBranch, getMovieReviews, saveReview } from '@/data/store';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
+import { Modal } from '@/components/ui/Modal';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
+import type { MovieReview } from '@/types';
 
 export function MovieDetailsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { toast } = useToast();
+
   const movie = useMemo(() => id ? getMovie(id) : undefined, [id]);
   const showtimes = useMemo(() => id ? getShowtimesByMovie(id) : [], [id]);
   const branches = useMemo(() => getBranches(), []);
 
   const [selectedBranch, setSelectedBranch] = useState<string>(branches[0]?.id || '');
   const [selectedDate, setSelectedDate] = useState<string>('');
+  const [isTrailerOpen, setIsTrailerOpen] = useState(false);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [newRating, setNewRating] = useState(5);
+  const [newComment, setNewComment] = useState('');
+  const [reviewTick, setReviewTick] = useState(0);
+
+  const reviews = useMemo(() => id ? getMovieReviews(id) : [], [id, reviewTick]);
+
 
   const dates = useMemo(() => {
     const set = new Set(showtimes.map(s => s.date));
@@ -44,6 +59,48 @@ export function MovieDetailsPage() {
     acc[key].push(s);
     return acc;
   }, {} as Record<string, typeof showtimes>);
+
+  const getEmbedUrl = (url?: string) => {
+    if (!url || url === '#') {
+      return 'https://www.youtube-nocookie.com/embed/Way9Dexny3w?autoplay=1';
+    }
+    const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+    return match ? `https://www.youtube-nocookie.com/embed/${match[1]}?autoplay=1` : url;
+  };
+
+  const handleOpenReviewModal = () => {
+    if (!user) {
+      toast('info', 'Please sign in to write a review');
+      return;
+    }
+    setIsReviewModalOpen(true);
+  };
+
+  const handleSubmitReview = () => {
+    if (!user || !movie) return;
+    if (!newComment.trim()) {
+      toast('error', 'Please enter your review text');
+      return;
+    }
+
+    const review: MovieReview = {
+      id: `rev_${Date.now()}`,
+      movieId: movie.id,
+      userId: user.id,
+      userName: user.name,
+      rating: newRating,
+      comment: newComment.trim(),
+      createdAt: new Date().toISOString().split('T')[0],
+      status: 'approved',
+    };
+
+    saveReview(review);
+    setNewComment('');
+    setNewRating(5);
+    setIsReviewModalOpen(false);
+    setReviewTick(t => t + 1);
+    toast('success', 'Thank you! Your review has been published.');
+  };
 
   return (
     <div>
@@ -105,7 +162,7 @@ export function MovieDetailsPage() {
             </div>
 
             <div className="flex gap-3">
-              <Button size="lg">
+              <Button size="lg" onClick={() => setIsTrailerOpen(true)}>
                 <Play className="w-4 h-4 fill-current" /> Watch Trailer
               </Button>
               {movie.status === 'now-showing' && (
@@ -218,7 +275,112 @@ export function MovieDetailsPage() {
             </div>
           </section>
         )}
+
+        {/* Customer Reviews Section */}
+        <section className="mt-16 border-t border-white/10 pt-10">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-2xl font-display font-bold">Audience Reviews & Ratings</h2>
+              <p className="text-sm text-text-secondary mt-1">Verified audience opinions and community impressions</p>
+            </div>
+            <Button onClick={handleOpenReviewModal} className="flex items-center gap-2">
+              <MessageSquare className="w-4 h-4" /> Write a Review
+            </Button>
+          </div>
+
+          {reviews.length === 0 ? (
+            <Card className="p-8 text-center text-text-muted">
+              <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-40" />
+              <p>No reviews yet for this movie. Be the first to share your thoughts!</p>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {reviews.map(r => (
+                <Card key={r.id} className="p-5 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-accent-primary/20 text-accent-primary flex items-center justify-center font-bold text-xs">
+                          {r.userName.charAt(0)}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold">{r.userName}</p>
+                          <p className="text-xs text-text-muted">{r.createdAt}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 text-accent-primary">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <Star key={i} className={`w-3.5 h-3.5 ${i < r.rating ? 'fill-accent-primary' : 'text-text-muted opacity-30'}`} />
+                        ))}
+                      </div>
+                    </div>
+                    <p className="text-sm text-text-secondary leading-relaxed">{r.comment}</p>
+                  </div>
+                  <div className="mt-4 pt-3 border-t border-white/5 flex items-center gap-2 text-xs text-text-muted">
+                    <ThumbsUp className="w-3 h-3" /> Helpful review
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Video Trailer Modal */}
+        <Modal isOpen={isTrailerOpen} onClose={() => setIsTrailerOpen(false)} title={`${movie.title} — Official Trailer`}>
+          <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black">
+            {isTrailerOpen && (
+              <iframe
+                src={getEmbedUrl(movie.trailerUrl)}
+                title={`${movie.title} Trailer`}
+                className="w-full h-full border-0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            )}
+          </div>
+        </Modal>
+
+        {/* Submit Review Modal */}
+        <Modal isOpen={isReviewModalOpen} onClose={() => setIsReviewModalOpen(false)} title={`Review "${movie.title}"`}>
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs uppercase tracking-wider text-text-muted block mb-2 font-medium">Your Rating</label>
+              <div className="flex items-center gap-2">
+                {[1, 2, 3, 4, 5].map(num => (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => setNewRating(num)}
+                    className="p-1.5 hover:scale-110 transition-transform"
+                  >
+                    <Star className={`w-7 h-7 ${num <= newRating ? 'fill-accent-primary text-accent-primary' : 'text-text-muted'}`} />
+                  </button>
+                ))}
+                <span className="text-sm font-semibold ml-2 text-accent-primary">{newRating} / 5 Stars</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs uppercase tracking-wider text-text-muted block mb-2 font-medium">Your Review</label>
+              <textarea
+                rows={4}
+                value={newComment}
+                onChange={e => setNewComment(e.target.value)}
+                placeholder="What did you think of the cinematography, story, and performances?"
+                className="w-full bg-cinema-base border border-white/10 rounded-xl p-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-primary/50"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="outline" onClick={() => setIsReviewModalOpen(false)}>Cancel</Button>
+              <Button onClick={handleSubmitReview} className="flex items-center gap-2">
+                <Send className="w-4 h-4" /> Submit Review
+              </Button>
+            </div>
+          </div>
+        </Modal>
       </div>
     </div>
   );
 }
+
