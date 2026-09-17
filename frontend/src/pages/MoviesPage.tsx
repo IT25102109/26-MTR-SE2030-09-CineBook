@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Navigate } from 'react-router-dom';
 import { Search, SlidersHorizontal, MapPin, Sparkles, CalendarDays, RotateCcw, Bookmark } from 'lucide-react';
 import { getMovies, getBranches, getShowtimes, isMovieWishlisted } from '@/data/store';
 import { useAuth } from '@/contexts/AuthContext';
@@ -8,6 +8,11 @@ import { Select } from '@/components/ui/Input';
 
 export function MoviesPage() {
   const { user } = useAuth();
+
+  if (user?.role === 'cinemaManager' || user?.role === 'admin') {
+    return <Navigate to="/manage/movies" replace />;
+  }
+
   const [searchParams, setSearchParams] = useSearchParams();
   const allMovies = useMemo(() => getMovies(), []);
   const branches = useMemo(() => getBranches(), []);

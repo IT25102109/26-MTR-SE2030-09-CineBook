@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Plus, Search, Edit2, Trash2, Film, RefreshCw, Database, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { getMovies, saveMovie, deleteMovie, fetchLiveMovies } from '@/data/store';
+import { Plus, Search, Edit2, Trash2, Film } from 'lucide-react';
+import { getMovies, saveMovie, deleteMovie } from '@/data/store';
 import { movieApi } from '@/api/movieApi';
 import { useToast } from '@/contexts/ToastContext';
 import { Button } from '@/components/ui/Button';
@@ -32,8 +32,6 @@ export function ManageMoviesPage() {
   const { toast } = useToast();
   const [movies, setMovies] = useState<Movie[]>(() => getMovies());
   const [loading, setLoading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [backendConnected, setBackendConnected] = useState<boolean | null>(null);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -45,30 +43,19 @@ export function ManageMoviesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Movie | null>(null);
 
   // Fetch live movies from backend API or local store on mount
-  const loadMovies = async (isManualSync = false) => {
-    if (isManualSync) setSyncing(true);
-    else if (movies.length === 0) setLoading(true);
-
+  const loadMovies = async () => {
     try {
       const liveList = await movieApi.getMovies();
-      if (Array.isArray(liveList)) {
+      if (Array.isArray(liveList) && liveList.length > 0) {
         setMovies(liveList);
-        setBackendConnected(true);
-        if (isManualSync) {
-          toast('success', `Synced ${liveList.length} movies from MySQL database`);
-        }
+      } else {
+        setMovies(getMovies());
       }
     } catch (err) {
       console.warn('Backend API not responding, using local store data:', err);
-      setBackendConnected(false);
-      const fallbackList = getMovies();
-      setMovies(fallbackList);
-      if (isManualSync) {
-        toast('info', 'Backend unreachable. Showing cached/local movies.');
-      }
+      setMovies(getMovies());
     } finally {
       setLoading(false);
-      setSyncing(false);
     }
   };
 
@@ -146,34 +133,11 @@ export function ManageMoviesPage() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-3xl font-display font-bold">Manage Movies</h1>
-            {backendConnected === true && (
-              <Badge variant="green" className="text-xs flex items-center gap-1 font-mono">
-                <Database className="w-3 h-3" /> MySQL Connected
-              </Badge>
-            )}
-            {backendConnected === false && (
-              <Badge variant="amber" className="text-xs flex items-center gap-1 font-mono">
-                <AlertCircle className="w-3 h-3" /> Offline / Local Cache
-              </Badge>
-            )}
-          </div>
+          <h1 className="text-3xl font-display font-bold mb-1">Manage Movies</h1>
           <p className="text-text-secondary text-sm">Add, edit, and manage movie listings in the catalog</p>
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => loadMovies(true)}
-            disabled={syncing}
-            className="text-xs h-9"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Syncing...' : 'Sync Backend'}
-          </Button>
-
           <Button onClick={openCreate} className="text-xs h-9">
             <Plus className="w-4 h-4 mr-1" /> Add Movie
           </Button>

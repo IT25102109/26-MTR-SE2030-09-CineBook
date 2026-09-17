@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Mail, Shield, Film, Ticket, LogOut, ChevronRight, Bell, ToggleLeft, ToggleRight, BellRing, Clock, Tag, Megaphone, Crown, Award, Gift, Sparkles, Check, Copy, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Mail, Shield, Film, Ticket, LogOut, ChevronRight, Bell, ToggleLeft, ToggleRight, BellRing, Clock, Tag, Megaphone, Crown, Award, Gift, Sparkles, Check, Copy, ArrowRight, CheckCircle2, Calendar, BarChart3, Building2, Users } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useNotifications } from '@/contexts/NotificationContext';
@@ -154,27 +154,30 @@ export function ProfilePage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6 border-t border-white/5">
-          <div className="text-center p-4 rounded-xl bg-cinema-elevated">
-            <Ticket className="w-5 h-5 text-accent-primary mx-auto mb-2" />
-            <p className="text-2xl font-display font-bold">{bookings.length}</p>
-            <p className="text-xs text-text-muted">Total Bookings</p>
+        {user.role === 'customer' && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6 border-t border-white/5">
+            <div className="text-center p-4 rounded-xl bg-cinema-elevated">
+              <Ticket className="w-5 h-5 text-accent-primary mx-auto mb-2" />
+              <p className="text-2xl font-display font-bold">{bookings.length}</p>
+              <p className="text-xs text-text-muted">Total Bookings</p>
+            </div>
+            <div className="text-center p-4 rounded-xl bg-cinema-elevated">
+              <Film className="w-5 h-5 text-accent-primary mx-auto mb-2" />
+              <p className="text-2xl font-display font-bold">{upcoming.length}</p>
+              <p className="text-xs text-text-muted">Upcoming</p>
+            </div>
+            <div className="text-center p-4 rounded-xl bg-cinema-elevated">
+              <span className="text-2xl block mb-2 font-display text-accent-primary">$</span>
+              <p className="text-2xl font-display font-bold">{totalSpent.toFixed(0)}</p>
+              <p className="text-xs text-text-muted">Total Spent</p>
+            </div>
           </div>
-          <div className="text-center p-4 rounded-xl bg-cinema-elevated">
-            <Film className="w-5 h-5 text-accent-primary mx-auto mb-2" />
-            <p className="text-2xl font-display font-bold">{upcoming.length}</p>
-            <p className="text-xs text-text-muted">Upcoming</p>
-          </div>
-          <div className="text-center p-4 rounded-xl bg-cinema-elevated">
-            <span className="text-2xl block mb-2 font-display text-accent-primary">$</span>
-            <p className="text-2xl font-display font-bold">{totalSpent.toFixed(0)}</p>
-            <p className="text-xs text-text-muted">Total Spent</p>
-          </div>
-        </div>
+        )}
       </Card>
 
       {/* Customer Loyalty Points & Tier Progression System (Member 6: IT25101952) */}
-      <Card className="p-6 sm:p-8 mb-6 relative overflow-hidden">
+      {user.role === 'customer' && (
+        <Card className="p-6 sm:p-8 mb-6 relative overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
@@ -338,6 +341,7 @@ export function ProfilePage() {
           </div>
         )}
       </Card>
+      )}
 
       {/* Notification Preferences */}
       {prefs && (
@@ -372,14 +376,85 @@ export function ProfilePage() {
       )}
 
       <Card className="overflow-hidden">
-        <Link to="/bookings" className="flex items-center justify-between p-5 hover:bg-cinema-elevated transition-colors group">
-          <div className="flex items-center gap-3">
-            <Ticket className="w-5 h-5 text-text-secondary" />
-            <span className="text-sm font-medium">My Bookings</span>
-          </div>
-          <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-accent-primary transition-colors" />
-        </Link>
-        <div className="border-t border-white/5" />
+        {user.role === 'customer' && (
+          <>
+            <Link to="/bookings" className="flex items-center justify-between p-5 hover:bg-cinema-elevated transition-colors group">
+              <div className="flex items-center gap-3">
+                <Ticket className="w-5 h-5 text-text-secondary" />
+                <span className="text-sm font-medium">My Bookings</span>
+              </div>
+              <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-accent-primary transition-colors" />
+            </Link>
+            <div className="border-t border-white/5" />
+          </>
+        )}
+
+        {user.role === 'cinemaManager' && (
+          <>
+            <Link to="/manage/movies" className="flex items-center justify-between p-5 hover:bg-cinema-elevated transition-colors group">
+              <div className="flex items-center gap-3">
+                <Film className="w-5 h-5 text-text-secondary" />
+                <span className="text-sm font-medium">Manage Movies</span>
+              </div>
+              <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-accent-primary transition-colors" />
+            </Link>
+            <div className="border-t border-white/5" />
+            <Link to="/manage/showtimes" className="flex items-center justify-between p-5 hover:bg-cinema-elevated transition-colors group">
+              <div className="flex items-center gap-3">
+                <Calendar className="w-5 h-5 text-text-secondary" />
+                <span className="text-sm font-medium">Manage Showtimes</span>
+              </div>
+              <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-accent-primary transition-colors" />
+            </Link>
+            <div className="border-t border-white/5" />
+          </>
+        )}
+
+        {user.role === 'admin' && (
+          <>
+            <Link to="/admin/analytics" className="flex items-center justify-between p-5 hover:bg-cinema-elevated transition-colors group">
+              <div className="flex items-center gap-3">
+                <BarChart3 className="w-5 h-5 text-text-secondary" />
+                <span className="text-sm font-medium">Analytics & Reports</span>
+              </div>
+              <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-accent-primary transition-colors" />
+            </Link>
+            <div className="border-t border-white/5" />
+            <Link to="/manage/movies" className="flex items-center justify-between p-5 hover:bg-cinema-elevated transition-colors group">
+              <div className="flex items-center gap-3">
+                <Film className="w-5 h-5 text-text-secondary" />
+                <span className="text-sm font-medium">Manage Movies</span>
+              </div>
+              <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-accent-primary transition-colors" />
+            </Link>
+            <div className="border-t border-white/5" />
+            <Link to="/manage/showtimes" className="flex items-center justify-between p-5 hover:bg-cinema-elevated transition-colors group">
+              <div className="flex items-center gap-3">
+                <Calendar className="w-5 h-5 text-text-secondary" />
+                <span className="text-sm font-medium">Manage Showtimes</span>
+              </div>
+              <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-accent-primary transition-colors" />
+            </Link>
+            <div className="border-t border-white/5" />
+            <Link to="/admin/branches" className="flex items-center justify-between p-5 hover:bg-cinema-elevated transition-colors group">
+              <div className="flex items-center gap-3">
+                <Building2 className="w-5 h-5 text-text-secondary" />
+                <span className="text-sm font-medium">Cinema Branches</span>
+              </div>
+              <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-accent-primary transition-colors" />
+            </Link>
+            <div className="border-t border-white/5" />
+            <Link to="/admin/users" className="flex items-center justify-between p-5 hover:bg-cinema-elevated transition-colors group">
+              <div className="flex items-center gap-3">
+                <Users className="w-5 h-5 text-text-secondary" />
+                <span className="text-sm font-medium">User Management</span>
+              </div>
+              <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-accent-primary transition-colors" />
+            </Link>
+            <div className="border-t border-white/5" />
+          </>
+        )}
+
         <Link to="/notifications" className="flex items-center justify-between p-5 hover:bg-cinema-elevated transition-colors group">
           <div className="flex items-center gap-3">
             <Bell className="w-5 h-5 text-text-secondary" />

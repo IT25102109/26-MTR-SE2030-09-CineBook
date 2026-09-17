@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import {
   Calendar,
   Clock,
@@ -58,6 +58,14 @@ interface RefundCalculation {
 
 export function MyBookingsPage() {
   const { user } = useAuth();
+
+  if (user?.role === 'cinemaManager') {
+    return <Navigate to="/manage/movies" replace />;
+  }
+  if (user?.role === 'admin') {
+    return <Navigate to="/admin/analytics" replace />;
+  }
+
   const { toast } = useToast();
   const { addNotification } = useNotifications();
 

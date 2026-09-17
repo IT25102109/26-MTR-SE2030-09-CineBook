@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { ChevronRight, TrendingUp, Calendar, Sparkles } from 'lucide-react';
 import { HeroCarousel } from '@/components/movies/HeroCarousel';
 import { MovieCard } from '@/components/movies/MovieCard';
@@ -8,6 +8,14 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export function HomePage() {
   const { user } = useAuth();
+
+  if (user?.role === 'cinemaManager') {
+    return <Navigate to="/manage/movies" replace />;
+  }
+  if (user?.role === 'admin') {
+    return <Navigate to="/admin/analytics" replace />;
+  }
+
   const movies = useMemo(() => getMovies(), []);
   const branches = useMemo(() => getBranches(), []);
   const recommendations = useMemo(() => getPersonalizedRecommendations(user?.id || 'guest'), [user]);

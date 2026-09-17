@@ -35,10 +35,12 @@ export function Navbar() {
     setUserMenuOpen(false);
   }, [location.pathname]);
 
+  const isCustomer = !user || user.role === 'customer';
+
   const navLinks = [
-    { to: '/', label: 'Home', icon: Film, show: true },
-    { to: '/movies', label: 'Movies', icon: Clapperboard, show: true },
-    { to: '/bookings', label: 'My Bookings', icon: Ticket, show: !!user },
+    { to: '/', label: 'Home', icon: Film, show: isCustomer },
+    { to: '/movies', label: 'Movies', icon: Clapperboard, show: isCustomer },
+    { to: '/bookings', label: 'My Bookings', icon: Ticket, show: !!user && user.role === 'customer' },
     { to: '/manage/movies', label: 'Manage Movies', icon: Film, show: hasRole('cinemaManager', 'admin') },
     { to: '/manage/showtimes', label: 'Manage Showtimes', icon: Calendar, show: hasRole('cinemaManager', 'admin') },
     { to: '/admin/analytics', label: 'Analytics', icon: BarChart3, show: hasRole('admin') },
@@ -47,10 +49,23 @@ export function Navbar() {
     { to: '/admin/notifications', label: 'Notification Center', icon: Bell, show: hasRole('admin') },
   ].filter(l => l.show);
 
+  const logoDestination = !user || user.role === 'customer'
+    ? '/'
+    : user.role === 'cinemaManager'
+    ? '/manage/movies'
+    : '/admin/analytics';
+
   const handleLogin = (role: Role) => {
     login(role);
     setLoginOpen(false);
     toast('success', `Signed in as ${roleLabels[role]}`);
+    if (role === 'cinemaManager') {
+      navigate('/manage/movies');
+    } else if (role === 'admin') {
+      navigate('/admin/analytics');
+    } else {
+      navigate('/');
+    }
   };
 
   const handleLogout = () => {
@@ -68,7 +83,7 @@ export function Navbar() {
         }`}
       >
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2.5 group">
+          <Link to={logoDestination} className="flex items-center gap-2.5 group">
             <div className="w-9 h-9 rounded-xl bg-accent-primary flex items-center justify-center group-hover:shadow-glow-amber transition-shadow">
               <Film className="w-5 h-5 text-black" />
             </div>

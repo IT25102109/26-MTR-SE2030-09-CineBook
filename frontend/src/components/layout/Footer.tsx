@@ -1,13 +1,18 @@
 import { Link } from 'react-router-dom';
 import { Film, Github, Twitter, Instagram } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function Footer() {
+  const { user } = useAuth();
+  const isCustomer = !user || user.role === 'customer';
+  const logoLink = isCustomer ? '/' : user.role === 'cinemaManager' ? '/manage/movies' : '/admin/analytics';
+
   return (
     <footer className="border-t border-white/5 bg-cinema-card mt-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <div className="col-span-1 md:col-span-2">
-            <Link to="/" className="flex items-center gap-2.5 mb-4">
+            <Link to={logoLink} className="flex items-center gap-2.5 mb-4">
               <div className="w-9 h-9 rounded-xl bg-accent-primary flex items-center justify-center">
                 <Film className="w-5 h-5 text-black" />
               </div>
@@ -28,12 +33,34 @@ export function Footer() {
           </div>
 
           <div>
-            <h4 className="text-sm font-semibold mb-3 text-text-primary">Explore</h4>
-            <ul className="space-y-2">
-              <li><Link to="/movies" className="text-sm text-text-secondary hover:text-accent-primary transition-colors">Now Showing</Link></li>
-              <li><Link to="/movies?filter=coming-soon" className="text-sm text-text-secondary hover:text-accent-primary transition-colors">Coming Soon</Link></li>
-              <li><Link to="/bookings" className="text-sm text-text-secondary hover:text-accent-primary transition-colors">My Bookings</Link></li>
-            </ul>
+            {isCustomer ? (
+              <>
+                <h4 className="text-sm font-semibold mb-3 text-text-primary">Explore</h4>
+                <ul className="space-y-2">
+                  <li><Link to="/movies" className="text-sm text-text-secondary hover:text-accent-primary transition-colors">Now Showing</Link></li>
+                  <li><Link to="/movies?filter=coming-soon" className="text-sm text-text-secondary hover:text-accent-primary transition-colors">Coming Soon</Link></li>
+                  {user && <li><Link to="/bookings" className="text-sm text-text-secondary hover:text-accent-primary transition-colors">My Bookings</Link></li>}
+                </ul>
+              </>
+            ) : user.role === 'cinemaManager' ? (
+              <>
+                <h4 className="text-sm font-semibold mb-3 text-text-primary">Management</h4>
+                <ul className="space-y-2">
+                  <li><Link to="/manage/movies" className="text-sm text-text-secondary hover:text-accent-primary transition-colors">Manage Movies</Link></li>
+                  <li><Link to="/manage/showtimes" className="text-sm text-text-secondary hover:text-accent-primary transition-colors">Manage Showtimes</Link></li>
+                </ul>
+              </>
+            ) : (
+              <>
+                <h4 className="text-sm font-semibold mb-3 text-text-primary">Administration</h4>
+                <ul className="space-y-2">
+                  <li><Link to="/admin/analytics" className="text-sm text-text-secondary hover:text-accent-primary transition-colors">Analytics & Reports</Link></li>
+                  <li><Link to="/manage/movies" className="text-sm text-text-secondary hover:text-accent-primary transition-colors">Manage Movies</Link></li>
+                  <li><Link to="/manage/showtimes" className="text-sm text-text-secondary hover:text-accent-primary transition-colors">Manage Showtimes</Link></li>
+                  <li><Link to="/admin/branches" className="text-sm text-text-secondary hover:text-accent-primary transition-colors">Cinema Branches</Link></li>
+                </ul>
+              </>
+            )}
           </div>
 
           <div>
