@@ -206,7 +206,7 @@ export function SeatSelectionPage() {
           <button
             type="button"
             onClick={() => setWaitlistModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-cinema-card border border-white/10 hover:border-accent-primary/40 text-text-secondary hover:text-white transition-all"
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-cinema-card border border-cinema-border hover:border-accent-primary/40 text-text-secondary hover:text-text-primary hover:bg-cinema-elevated transition-all"
           >
             <Bell className="w-3 h-3 text-accent-primary" /> Waitlist ({waitlistCount})
           </button>
@@ -297,7 +297,7 @@ export function SeatSelectionPage() {
               <button
                 key={n}
                 onClick={() => autoSelectAdjacent(n)}
-                className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-cinema-elevated border border-white/10 hover:border-accent-primary/40 hover:text-accent-primary transition-all"
+                className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-cinema-elevated border border-cinema-border hover:border-accent-primary/40 hover:text-accent-primary transition-all"
                 title={`Select ${n} adjacent seats`}
               >
                 {n}
@@ -348,7 +348,7 @@ export function SeatSelectionPage() {
                               ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30 hover:bg-blue-500/25'
                               : premium
                               ? 'bg-accent-primary/15 text-accent-primary border border-accent-primary/30 hover:bg-accent-primary/25'
-                              : 'bg-cinema-elevated text-text-secondary border border-white/10 hover:border-accent-primary/40 hover:text-text-primary'
+                              : 'bg-cinema-elevated text-text-secondary border border-cinema-border hover:border-accent-primary/40 hover:text-text-primary'
                             }
                             ${premium && !booked && !selected ? 'animate-pulse-glow' : ''}
                           `}

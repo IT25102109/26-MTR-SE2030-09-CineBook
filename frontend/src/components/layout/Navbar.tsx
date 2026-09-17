@@ -120,7 +120,7 @@ export function Navbar() {
               <div className="relative">
                 <button
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors"
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-cinema-elevated transition-colors"
                 >
                   <div
                     className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-black"
@@ -133,35 +133,35 @@ export function Navbar() {
                 </button>
                 {userMenuOpen && (
                   <div className="absolute right-0 top-full mt-2 w-56 bg-cinema-elevated hairline rounded-xl shadow-soft-lg py-2 animate-slide-down">
-                    <div className="px-4 py-2 border-b border-white/5">
+                    <div className="px-4 py-2 border-b border-cinema-border">
                       <p className="text-sm font-medium">{user.name}</p>
                       <p className="text-xs text-text-muted">{user.email}</p>
                       <span className="inline-block mt-1 text-xs text-accent-primary">{roleLabels[user.role]}</span>
                     </div>
-                    <Link to="/profile" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-white/5 transition-colors">
+                    <Link to="/profile" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-cinema-card transition-colors">
                       <UserCircle className="w-4 h-4" /> Profile
                     </Link>
                     {hasRole('cinemaManager', 'admin') && (
                       <>
-                        <Link to="/manage/movies" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-white/5 transition-colors lg:hidden">
+                        <Link to="/manage/movies" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-cinema-card transition-colors lg:hidden">
                           <Film className="w-4 h-4" /> Manage Movies
                         </Link>
-                        <Link to="/manage/showtimes" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-white/5 transition-colors lg:hidden">
+                        <Link to="/manage/showtimes" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-cinema-card transition-colors lg:hidden">
                           <Calendar className="w-4 h-4" /> Manage Showtimes
                         </Link>
                       </>
                     )}
                     {hasRole('admin') && (
                       <>
-                        <Link to="/admin/analytics" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-white/5 transition-colors lg:hidden">
+                        <Link to="/admin/analytics" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-cinema-card transition-colors lg:hidden">
                           <BarChart3 className="w-4 h-4" /> Analytics
                         </Link>
-                        <Link to="/admin/notifications" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-white/5 transition-colors lg:hidden">
+                        <Link to="/admin/notifications" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-cinema-card transition-colors lg:hidden">
                           <Bell className="w-4 h-4" /> Notification Center
                         </Link>
                       </>
                     )}
-                    <button onClick={handleLogout} className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-text-secondary hover:text-accent-destructive hover:bg-white/5 transition-colors border-t border-white/5">
+                    <button onClick={handleLogout} className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-text-secondary hover:text-accent-destructive hover:bg-cinema-card transition-colors border-t border-cinema-border">
                       <LogOut className="w-4 h-4" /> Sign Out
                     </button>
                   </div>
@@ -176,7 +176,7 @@ export function Navbar() {
 
             <button
               onClick={() => setMobileOpen(!mobileOpen)}
-              className="lg:hidden p-2 rounded-lg hover:bg-white/5 transition-colors"
+              className="lg:hidden p-2 rounded-lg hover:bg-cinema-elevated transition-colors"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 {mobileOpen ? (
@@ -224,7 +224,7 @@ export function Navbar() {
             <button
               key={role}
               onClick={() => handleLogin(role)}
-              className="w-full flex items-center justify-between p-4 rounded-xl bg-cinema-elevated hover:bg-cinema-border border border-white/5 hover:border-accent-primary/30 transition-all group"
+              className="w-full flex items-center justify-between p-4 rounded-xl bg-cinema-elevated hover:bg-cinema-border border border-cinema-border hover:border-accent-primary/30 transition-all group"
             >
               <div className="text-left">
                 <p className="font-medium">{roleLabels[role]}</p>

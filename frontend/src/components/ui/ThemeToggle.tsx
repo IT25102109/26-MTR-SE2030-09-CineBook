@@ -16,8 +16,8 @@ export function ThemeToggle({ className = '', showLabel = false }: ThemeTogglePr
       type="button"
       className={`relative flex items-center gap-2 p-2 rounded-xl transition-all duration-300 ${
         isDark
-          ? 'text-text-secondary hover:text-accent-primary hover:bg-white/5'
-          : 'text-text-secondary hover:text-amber-500 hover:bg-black/5'
+          ? 'text-text-secondary hover:text-accent-primary hover:bg-cinema-elevated'
+          : 'text-text-secondary hover:text-amber-500 hover:bg-cinema-elevated'
       } ${className}`}
       title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
       aria-label={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
@@ -46,3 +46,4 @@ export function ThemeToggle({ className = '', showLabel = false }: ThemeTogglePr
     </button>
   );
 }
+

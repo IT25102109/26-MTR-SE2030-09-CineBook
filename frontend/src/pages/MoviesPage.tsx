@@ -115,7 +115,7 @@ export function MoviesPage() {
           className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
             statusFilter === 'all'
               ? 'bg-accent-primary text-white shadow-lg shadow-accent-primary/25'
-              : 'bg-cinema-card text-text-secondary hover:text-white hairline'
+              : 'bg-cinema-card text-text-secondary hover:text-text-primary hover:bg-cinema-elevated hairline'
           }`}
         >
           All Movies
@@ -126,7 +126,7 @@ export function MoviesPage() {
           className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
             statusFilter === 'now-showing'
               ? 'bg-accent-primary text-white shadow-lg shadow-accent-primary/25'
-              : 'bg-cinema-card text-text-secondary hover:text-white hairline'
+              : 'bg-cinema-card text-text-secondary hover:text-text-primary hover:bg-cinema-elevated hairline'
           }`}
         >
           Now Showing
@@ -137,7 +137,7 @@ export function MoviesPage() {
           className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
             statusFilter === 'coming-soon'
               ? 'bg-accent-primary text-white shadow-lg shadow-accent-primary/25'
-              : 'bg-cinema-card text-text-secondary hover:text-white hairline'
+              : 'bg-cinema-card text-text-secondary hover:text-text-primary hover:bg-cinema-elevated hairline'
           }`}
         >
           Coming Soon
@@ -148,7 +148,7 @@ export function MoviesPage() {
           className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
             statusFilter === 'wishlist'
               ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/25'
-              : 'bg-cinema-card text-text-secondary hover:text-amber-400 hairline'
+              : 'bg-cinema-card text-text-secondary hover:text-amber-500 hover:bg-cinema-elevated hairline'
           }`}
         >
           <Bookmark className="w-3.5 h-3.5" /> My Wishlist

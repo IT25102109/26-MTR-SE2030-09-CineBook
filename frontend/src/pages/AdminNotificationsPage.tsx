@@ -285,7 +285,7 @@ export function AdminNotificationsPage() {
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              activeTab === tab.id ? 'bg-accent-primary text-black' : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
+              activeTab === tab.id ? 'bg-accent-primary text-black' : 'text-text-secondary hover:text-text-primary hover:bg-cinema-elevated'
             }`}
           >
             <tab.icon className="w-4 h-4" /> {tab.label}
@@ -371,10 +371,10 @@ export function AdminNotificationsPage() {
                     <Badge variant="default">{typeLabels[tpl.type] || tpl.type}</Badge>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => openEditTemplate(tpl)} className="p-1.5 rounded-lg hover:bg-white/5 text-text-secondary hover:text-accent-primary transition-colors">
+                    <button onClick={() => openEditTemplate(tpl)} className="p-1.5 rounded-lg hover:bg-cinema-elevated text-text-secondary hover:text-accent-primary transition-colors">
                       <Edit2 className="w-4 h-4" />
                     </button>
-                    <button onClick={() => setDeleteTarget(tpl)} className="p-1.5 rounded-lg hover:bg-white/5 text-text-secondary hover:text-accent-destructive transition-colors">
+                    <button onClick={() => setDeleteTarget(tpl)} className="p-1.5 rounded-lg hover:bg-cinema-elevated text-text-secondary hover:text-accent-destructive transition-colors">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -444,7 +444,7 @@ export function AdminNotificationsPage() {
                   className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium border transition-all ${
                     compose.audience === aud.value
                       ? 'bg-accent-primary/10 border-accent-primary/30 text-accent-primary'
-                      : 'border-white/10 text-text-secondary hover:text-text-primary hover:bg-white/5'
+                      : 'border-cinema-border text-text-secondary hover:text-text-primary hover:bg-cinema-elevated'
                   }`}
                 >
                   <aud.icon className="w-3.5 h-3.5 flex-shrink-0" /> {aud.label}

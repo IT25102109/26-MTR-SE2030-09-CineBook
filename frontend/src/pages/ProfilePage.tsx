@@ -329,7 +329,7 @@ export function ProfilePage() {
                     </code>
                     <button
                       onClick={() => handleCopyCode(v.code)}
-                      className="p-1.5 rounded-lg bg-cinema-elevated hover:bg-white/10 text-text-secondary hover:text-white transition-colors"
+                      className="p-1.5 rounded-lg bg-cinema-elevated hover:bg-cinema-border/50 text-text-secondary hover:text-text-primary transition-colors"
                       title="Copy code"
                     >
                       {copiedCode === v.code ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}

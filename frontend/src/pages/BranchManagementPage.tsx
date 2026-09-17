@@ -136,7 +136,7 @@ export function BranchManagementPage() {
                       <button
                         onClick={() => openEdit(branch)}
                         title="Edit Branch Layout"
-                        className="p-2 rounded-lg hover:bg-white/5 text-text-secondary hover:text-accent-primary transition-colors"
+                        className="p-2 rounded-lg hover:bg-cinema-elevated text-text-secondary hover:text-accent-primary transition-colors"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
@@ -145,7 +145,7 @@ export function BranchManagementPage() {
                       <button
                         onClick={() => setDeleteTarget(branch)}
                         title="Delete Branch"
-                        className="p-2 rounded-lg hover:bg-white/5 text-text-secondary hover:text-accent-destructive transition-colors"
+                        className="p-2 rounded-lg hover:bg-cinema-elevated text-text-secondary hover:text-accent-destructive transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

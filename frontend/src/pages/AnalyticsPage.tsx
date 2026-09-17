@@ -279,7 +279,7 @@ export function AnalyticsPage() {
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium uppercase transition-all ${
                   dateRange === range
                     ? 'bg-accent-primary text-black font-semibold shadow'
-                    : 'text-text-secondary hover:text-white'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-cinema-elevated'
                 }`}
               >
                 {range === 'all' ? 'All Time' : range === 'month' ? 'This Month' : range}
@@ -553,9 +553,9 @@ export function AnalyticsPage() {
                 <th className="py-3 px-3">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 font-mono text-xs">
+            <tbody className="divide-y divide-cinema-border font-mono text-xs">
               {branchAnalytics.map(b => (
-                <tr key={b.id} className="hover:bg-white/[0.02] transition-colors">
+                <tr key={b.id} className="hover:bg-cinema-elevated/50 transition-colors">
                   <td className="py-3.5 px-3 font-sans font-semibold text-text-primary">{b.fullName}</td>
                   <td className="py-3.5 px-3 text-text-secondary">{b.city}</td>
                   <td className="py-3.5 px-3 text-text-muted">{b.hallsCount} Halls</td>
@@ -563,7 +563,7 @@ export function AnalyticsPage() {
                   <td className="py-3.5 px-3 font-semibold text-text-primary">{b.ticketsSold}</td>
                   <td className="py-3.5 px-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-16 bg-white/10 rounded-full h-1.5 overflow-hidden">
+                      <div className="w-16 bg-cinema-border rounded-full h-1.5 overflow-hidden">
                         <div
                           className="bg-accent-primary h-full rounded-full"
                           style={{ width: `${b.occupancy}%` }}

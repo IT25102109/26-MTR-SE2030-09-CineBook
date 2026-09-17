@@ -186,7 +186,7 @@ export function MovieDetailsPage() {
                   <div className="flex gap-2 flex-wrap">
                     <button
                       onClick={() => setSelectedBranch('')}
-                      className={`px-3 py-2 rounded-lg text-sm border transition-all ${!selectedBranch ? 'bg-accent-primary/10 border-accent-primary/30 text-accent-primary' : 'border-white/10 text-text-secondary hover:text-text-primary hover:bg-white/5'}`}
+                      className={`px-3 py-2 rounded-lg text-sm border transition-all ${!selectedBranch ? 'bg-accent-primary/10 border-accent-primary/30 text-accent-primary' : 'border-cinema-border text-text-secondary hover:text-text-primary hover:bg-cinema-elevated'}`}
                     >
                       All Cinemas
                     </button>
@@ -194,7 +194,7 @@ export function MovieDetailsPage() {
                       <button
                         key={b.id}
                         onClick={() => setSelectedBranch(b.id)}
-                        className={`px-3 py-2 rounded-lg text-sm border transition-all ${selectedBranch === b.id ? 'bg-accent-primary/10 border-accent-primary/30 text-accent-primary' : 'border-white/10 text-text-secondary hover:text-text-primary hover:bg-white/5'}`}
+                        className={`px-3 py-2 rounded-lg text-sm border transition-all ${selectedBranch === b.id ? 'bg-accent-primary/10 border-accent-primary/30 text-accent-primary' : 'border-cinema-border text-text-secondary hover:text-text-primary hover:bg-cinema-elevated'}`}
                       >
                         {b.name.replace('CineBook ', '')}
                       </button>
@@ -206,7 +206,7 @@ export function MovieDetailsPage() {
                   <div className="flex gap-2 overflow-x-auto pb-1">
                     <button
                       onClick={() => setSelectedDate('')}
-                      className={`px-3 py-2 rounded-lg text-sm border transition-all whitespace-nowrap ${!selectedDate ? 'bg-accent-primary/10 border-accent-primary/30 text-accent-primary' : 'border-white/10 text-text-secondary hover:text-text-primary hover:bg-white/5'}`}
+                      className={`px-3 py-2 rounded-lg text-sm border transition-all whitespace-nowrap ${!selectedDate ? 'bg-accent-primary/10 border-accent-primary/30 text-accent-primary' : 'border-cinema-border text-text-secondary hover:text-text-primary hover:bg-cinema-elevated'}`}
                     >
                       All Dates
                     </button>
@@ -214,7 +214,7 @@ export function MovieDetailsPage() {
                       <button
                         key={d}
                         onClick={() => setSelectedDate(d)}
-                        className={`px-3 py-2 rounded-lg text-sm border transition-all whitespace-nowrap ${selectedDate === d ? 'bg-accent-primary/10 border-accent-primary/30 text-accent-primary' : 'border-white/10 text-text-secondary hover:text-text-primary hover:bg-white/5'}`}
+                        className={`px-3 py-2 rounded-lg text-sm border transition-all whitespace-nowrap ${selectedDate === d ? 'bg-accent-primary/10 border-accent-primary/30 text-accent-primary' : 'border-cinema-border text-text-secondary hover:text-text-primary hover:bg-cinema-elevated'}`}
                       >
                         {new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       </button>

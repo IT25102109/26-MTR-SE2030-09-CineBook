@@ -368,7 +368,7 @@ export function MyBookingsPage() {
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={() => setCalendarMenuTarget(null)}
-                            className="block px-3 py-1.5 text-xs text-text-secondary hover:text-white hover:bg-white/5 rounded-lg"
+                            className="block px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-cinema-elevated rounded-lg transition-colors"
                           >
                             Google Calendar
                           </a>
@@ -379,7 +379,7 @@ export function MyBookingsPage() {
                               setCalendarMenuTarget(null);
                               toast('success', 'iCalendar (.ics) file downloaded');
                             }}
-                            className="block w-full text-left px-3 py-1.5 text-xs text-text-secondary hover:text-white hover:bg-white/5 rounded-lg"
+                            className="block w-full text-left px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-cinema-elevated rounded-lg transition-colors"
                           >
                             Download .ics (Apple / Outlook)
                           </button>
@@ -485,7 +485,7 @@ export function MyBookingsPage() {
               className={`px-3.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
                 activeTab === tab.id
                   ? 'bg-accent-primary text-black font-semibold shadow'
-                  : 'text-text-secondary hover:text-white'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-cinema-elevated'
               }`}
             >
               {tab.label}
@@ -700,7 +700,7 @@ export function MyBookingsPage() {
                         className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
                           isSelected
                             ? 'border-accent-primary bg-accent-primary/10 shadow-sm'
-                            : 'border-white/10 hover:border-white/20 bg-cinema-card'
+                            : 'border-cinema-border hover:border-cinema-border/80 hover:bg-cinema-elevated bg-cinema-card'
                         }`}
                       >
                         <div className="text-xs space-y-0.5">

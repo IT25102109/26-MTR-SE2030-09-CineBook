@@ -86,7 +86,7 @@ export function NotificationBell() {
               recent.map(n => (
                 <div
                   key={n.id}
-                  className={`group flex gap-3 px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors cursor-pointer ${
+                  className={`group flex gap-3 px-4 py-3 border-b border-cinema-border/50 hover:bg-cinema-elevated transition-colors cursor-pointer ${
                     !n.read ? 'border-l-2 border-l-accent-primary' : 'border-l-2 border-l-transparent'
                   }`}
                   onClick={() => handleItemClick(n)}

@@ -489,7 +489,7 @@ export function ETicketPage() {
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setShowCalendarMenu(false)}
-                className="flex items-center gap-2 w-full px-3 py-2 text-xs font-medium rounded-lg text-text-secondary hover:text-white hover:bg-white/5 transition-colors"
+                className="flex items-center gap-2 w-full px-3 py-2 text-xs font-medium rounded-lg text-text-secondary hover:text-text-primary hover:bg-cinema-elevated transition-colors"
               >
                 Google Calendar
               </a>
@@ -500,7 +500,7 @@ export function ETicketPage() {
                   setShowCalendarMenu(false);
                   toast('success', 'iCalendar (.ics) file downloaded');
                 }}
-                className="flex items-center gap-2 w-full px-3 py-2 text-xs font-medium rounded-lg text-text-secondary hover:text-white hover:bg-white/5 transition-colors text-left"
+                className="flex items-center gap-2 w-full px-3 py-2 text-xs font-medium rounded-lg text-text-secondary hover:text-text-primary hover:bg-cinema-elevated transition-colors text-left"
               >
                 Download .ics (Apple / Outlook)
               </button>
