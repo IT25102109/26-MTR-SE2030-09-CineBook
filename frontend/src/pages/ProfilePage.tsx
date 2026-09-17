@@ -194,7 +194,7 @@ export function ProfilePage() {
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-xl font-display font-bold">CineClub Loyalty</h2>
-                <Badge variant={currentTier === 'Platinum' ? 'purple' : currentTier === 'Gold' ? 'amber' : currentTier === 'Silver' ? 'blue' : 'default'}>
+                <Badge variant={currentTier === 'Platinum' || currentTier === 'Gold' ? 'amber' : currentTier === 'Silver' ? 'blue' : 'default'}>
                   {currentTier} Tier
                 </Badge>
               </div>

@@ -440,7 +440,7 @@ export function AnalyticsPage() {
                   borderRadius: '12px',
                   color: '#F2F2F0',
                 }}
-                formatter={(val: number) => [`${val}%`, 'Occupancy Share']}
+                formatter={(val: any) => [`${val}%`, 'Occupancy Share']}
               />
             </RechartsPie>
           </ResponsiveContainer>

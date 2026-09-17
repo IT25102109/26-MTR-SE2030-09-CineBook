@@ -2,7 +2,8 @@ import { type ReactNode, useEffect } from 'react';
 import { X } from 'lucide-react';
 
 interface ModalProps {
-  open: boolean;
+  open?: boolean;
+  isOpen?: boolean;
   onClose: () => void;
   title?: string;
   children: ReactNode;
@@ -16,15 +17,17 @@ const sizes = {
   lg: 'max-w-3xl',
 };
 
-export function Modal({ open, onClose, title, children, size = 'md', footer }: ModalProps) {
+export function Modal({ open, isOpen, onClose, title, children, size = 'md', footer }: ModalProps) {
+  const isVisible = open ?? isOpen ?? false;
+
   useEffect(() => {
-    if (open) {
+    if (isVisible) {
       document.body.style.overflow = 'hidden';
       return () => { document.body.style.overflow = ''; };
     }
-  }, [open]);
+  }, [isVisible]);
 
-  if (!open) return null;
+  if (!isVisible) return null;
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">

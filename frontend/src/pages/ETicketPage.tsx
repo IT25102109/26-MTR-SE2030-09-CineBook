@@ -124,7 +124,7 @@ export function ETicketPage() {
         <div className="flex items-center justify-center gap-2 mb-2">
           <h1 className="text-3xl font-display font-bold">Booking Confirmed!</h1>
           {isCheckedIn ? (
-            <Badge variant="emerald" className="text-xs px-2.5 py-0.5 font-mono">
+            <Badge variant="green" className="text-xs px-2.5 py-0.5 font-mono">
               GATE CHECKED-IN
             </Badge>
           ) : (
@@ -261,7 +261,7 @@ export function ETicketPage() {
               </div>
 
               <div>
-                <Badge variant="emerald" className="mb-2 px-3 py-1 font-mono text-xs">
+                <Badge variant="green" className="mb-2 px-3 py-1 font-mono text-xs">
                   ENTRY GRANTED • TURNSTILE UNLOCKED
                 </Badge>
                 <h3 className="font-display font-bold text-xl text-text-primary">{booking.movieTitle}</h3>

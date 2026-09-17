@@ -141,7 +141,6 @@ export function ManageShowtimesPage() {
           movieId: s.movieId,
           branchId: s.branchId,
           hallId: s.hallId,
-          hallName: s.hallName,
           date: targetDateStr,
           time: s.time,
           basePrice: s.basePrice,

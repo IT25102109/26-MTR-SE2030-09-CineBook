@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Star, Clock, Calendar, Film, Play, ChevronLeft, MapPin, X, MessageSquare, ThumbsUp, Send } from 'lucide-react';
+import { Star, Clock, Calendar, Film, Play, ChevronLeft, MapPin, X, MessageSquare, ThumbsUp, Send, User } from 'lucide-react';
 import { getMovie, getShowtimesByMovie, getBranches, getBranch, getMovieReviews, saveReview } from '@/data/store';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
@@ -13,7 +14,7 @@ import type { MovieReview } from '@/types';
 export function MovieDetailsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, login } = useAuth();
   const { toast } = useToast();
 
   const movie = useMemo(() => id ? getMovie(id) : undefined, [id]);
@@ -26,6 +27,7 @@ export function MovieDetailsPage() {
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [newRating, setNewRating] = useState(5);
   const [newComment, setNewComment] = useState('');
+  const [authorName, setAuthorName] = useState('');
   const [reviewTick, setReviewTick] = useState(0);
 
   const reviews = useMemo(() => id ? getMovieReviews(id) : [], [id, reviewTick]);
@@ -69,25 +71,24 @@ export function MovieDetailsPage() {
   };
 
   const handleOpenReviewModal = () => {
-    if (!user) {
-      toast('info', 'Please sign in to write a review');
-      return;
-    }
     setIsReviewModalOpen(true);
   };
 
   const handleSubmitReview = () => {
-    if (!user || !movie) return;
+    if (!movie) return;
     if (!newComment.trim()) {
       toast('error', 'Please enter your review text');
       return;
     }
 
+    const reviewerName = user ? user.name : (authorName.trim() || 'Verified Moviegoer');
+    const reviewerId = user ? user.id : `guest_${Date.now()}`;
+
     const review: MovieReview = {
       id: `rev_${Date.now()}`,
       movieId: movie.id,
-      userId: user.id,
-      userName: user.name,
+      userId: reviewerId,
+      userName: reviewerName,
       rating: newRating,
       comment: newComment.trim(),
       createdAt: new Date().toISOString().split('T')[0],
@@ -97,6 +98,7 @@ export function MovieDetailsPage() {
     saveReview(review);
     setNewComment('');
     setNewRating(5);
+    setAuthorName('');
     setIsReviewModalOpen(false);
     setReviewTick(t => t + 1);
     toast('success', 'Thank you! Your review has been published.');
@@ -277,7 +279,7 @@ export function MovieDetailsPage() {
         )}
 
         {/* Customer Reviews Section */}
-        <section className="mt-16 border-t border-white/10 pt-10">
+        <section className="mt-16 border-t border-cinema-border pt-10">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="text-2xl font-display font-bold">Audience Reviews & Ratings</h2>
@@ -316,7 +318,7 @@ export function MovieDetailsPage() {
                     </div>
                     <p className="text-sm text-text-secondary leading-relaxed">{r.comment}</p>
                   </div>
-                  <div className="mt-4 pt-3 border-t border-white/5 flex items-center gap-2 text-xs text-text-muted">
+                  <div className="mt-4 pt-3 border-t border-cinema-border flex items-center gap-2 text-xs text-text-muted">
                     <ThumbsUp className="w-3 h-3" /> Helpful review
                   </div>
                 </Card>
@@ -326,7 +328,7 @@ export function MovieDetailsPage() {
         </section>
 
         {/* Video Trailer Modal */}
-        <Modal isOpen={isTrailerOpen} onClose={() => setIsTrailerOpen(false)} title={`${movie.title} — Official Trailer`}>
+        <Modal open={isTrailerOpen} onClose={() => setIsTrailerOpen(false)} title={`${movie.title} — Official Trailer`}>
           <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black">
             {isTrailerOpen && (
               <iframe
@@ -341,8 +343,47 @@ export function MovieDetailsPage() {
         </Modal>
 
         {/* Submit Review Modal */}
-        <Modal isOpen={isReviewModalOpen} onClose={() => setIsReviewModalOpen(false)} title={`Review "${movie.title}"`}>
+        <Modal open={isReviewModalOpen} onClose={() => setIsReviewModalOpen(false)} title={`Review "${movie.title}"`}>
           <div className="space-y-4">
+            {user ? (
+              <div className="flex items-center justify-between p-3 rounded-xl bg-cinema-elevated hairline">
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-black"
+                    style={{ backgroundColor: user.avatarColor || '#E5A93C' }}
+                  >
+                    {user.name.charAt(0)}
+                  </div>
+                  <div>
+                    <span className="text-xs text-text-muted block">Posting review as</span>
+                    <span className="text-xs font-semibold text-text-primary">{user.name}</span>
+                  </div>
+                </div>
+                <Badge variant="amber" className="text-[10px] capitalize">{user.role}</Badge>
+              </div>
+            ) : (
+              <div className="space-y-1.5 p-3 rounded-xl bg-cinema-elevated hairline">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-text-secondary font-medium">Reviewer Identity</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      login('customer');
+                      toast('success', 'Signed in as Demo Customer (Alex Morgan)');
+                    }}
+                    className="text-xs text-accent-primary hover:underline font-medium"
+                  >
+                    ⚡ One-Click Sign In
+                  </button>
+                </div>
+                <Input
+                  placeholder="Enter your name / nickname (or post as Verified Moviegoer)"
+                  value={authorName}
+                  onChange={e => setAuthorName(e.target.value)}
+                />
+              </div>
+            )}
+
             <div>
               <label className="text-xs uppercase tracking-wider text-text-muted block mb-2 font-medium">Your Rating</label>
               <div className="flex items-center gap-2">
@@ -352,6 +393,7 @@ export function MovieDetailsPage() {
                     type="button"
                     onClick={() => setNewRating(num)}
                     className="p-1.5 hover:scale-110 transition-transform"
+                    aria-label={`Rate ${num} stars`}
                   >
                     <Star className={`w-7 h-7 ${num <= newRating ? 'fill-accent-primary text-accent-primary' : 'text-text-muted'}`} />
                   </button>
@@ -367,7 +409,7 @@ export function MovieDetailsPage() {
                 value={newComment}
                 onChange={e => setNewComment(e.target.value)}
                 placeholder="What did you think of the cinematography, story, and performances?"
-                className="w-full bg-cinema-base border border-white/10 rounded-xl p-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-primary/50"
+                className="w-full bg-cinema-base border border-cinema-border rounded-xl p-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-primary/50"
               />
             </div>
 

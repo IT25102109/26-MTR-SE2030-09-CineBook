@@ -69,7 +69,7 @@ export function MyBookingsPage() {
   const { toast } = useToast();
   const { addNotification } = useNotifications();
 
-  const isAdminOrManager = user?.role === 'admin' || user?.role === 'cinemaManager';
+  const isAdminOrManager = (user?.role as string) === 'admin' || (user?.role as string) === 'cinemaManager';
 
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -78,6 +78,7 @@ export function MyBookingsPage() {
   const [selectedNewShowtime, setSelectedNewShowtime] = useState<Showtime | null>(null);
   const [shareTarget, setShareTarget] = useState<Booking | null>(null);
   const [refundReviewTarget, setRefundReviewTarget] = useState<Booking | null>(null);
+  const [adminRefundNote, setAdminRefundNote] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
   const [calendarMenuTarget, setCalendarMenuTarget] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -797,7 +798,7 @@ export function MyBookingsPage() {
                   const updated: Booking = {
                     ...refundReviewTarget,
                     refundAmount: refundReviewTarget.totalAmount,
-                    refundStatus: 'approved',
+                    refundStatus: 'processed',
                   };
                   saveBooking(updated);
                   saveNotification({
@@ -805,7 +806,7 @@ export function MyBookingsPage() {
                     userId: refundReviewTarget.userId,
                     title: 'Refund Override Approved',
                     message: `Your cancellation for ${refundReviewTarget.movieTitle} was granted an exceptional 100% refund of $${refundReviewTarget.totalAmount.toFixed(2)} by cinema administration.`,
-                    type: 'refund_processed',
+                    type: 'cancellation_refund',
                     read: false,
                     createdAt: new Date().toISOString(),
                     status: 'sent',
@@ -824,7 +825,7 @@ export function MyBookingsPage() {
                 onClick={() => {
                   const updated: Booking = {
                     ...refundReviewTarget,
-                    refundStatus: 'approved',
+                    refundStatus: 'processed',
                   };
                   saveBooking(updated);
                   saveNotification({
@@ -832,7 +833,7 @@ export function MyBookingsPage() {
                     userId: refundReviewTarget.userId,
                     title: 'Cinema Credit Voucher Issued',
                     message: `A full promotional credit voucher for $${refundReviewTarget.totalAmount.toFixed(2)} has been issued for your cancelled screening of ${refundReviewTarget.movieTitle}.`,
-                    type: 'refund_processed',
+                    type: 'cancellation_refund',
                     read: false,
                     createdAt: new Date().toISOString(),
                     status: 'sent',
