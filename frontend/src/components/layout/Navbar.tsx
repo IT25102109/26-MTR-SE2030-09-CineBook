@@ -7,6 +7,7 @@ import type { Role } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 const roleLabels: Record<Role, string> = {
   customer: 'Customer',
@@ -79,7 +80,7 @@ export function Navbar() {
     <>
       <header
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-          scrolled ? 'glass border-b border-white/5' : 'bg-transparent'
+          scrolled ? 'glass border-b border-cinema-border' : 'bg-transparent'
         }`}
       >
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -102,7 +103,7 @@ export function Navbar() {
                   className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-all ${
                     active
                       ? 'text-accent-primary bg-accent-primary/10'
-                      : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
+                      : 'text-text-secondary hover:text-text-primary hover:bg-cinema-elevated'
                   }`}
                 >
                   {link.label}
@@ -111,7 +112,8 @@ export function Navbar() {
             })}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <ThemeToggle />
             {user ? (
               <>
               <NotificationBell />
@@ -188,7 +190,7 @@ export function Navbar() {
         </nav>
 
         {mobileOpen && (
-          <div className="lg:hidden glass border-t border-white/5 py-3 animate-slide-down">
+          <div className="lg:hidden glass border-t border-cinema-border py-3 animate-slide-down">
             <div className="max-w-7xl mx-auto px-4 flex flex-col gap-1">
               {navLinks.map(link => {
                 const active = location.pathname === link.to;
@@ -197,13 +199,17 @@ export function Navbar() {
                     key={link.to}
                     to={link.to}
                     className={`flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                      active ? 'text-accent-primary bg-accent-primary/10' : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
+                      active ? 'text-accent-primary bg-accent-primary/10' : 'text-text-secondary hover:text-text-primary hover:bg-cinema-elevated'
                     }`}
                   >
                     <link.icon className="w-4 h-4" /> {link.label}
                   </Link>
                 );
               })}
+              <div className="pt-2 mt-1 border-t border-cinema-border flex items-center justify-between px-4 py-2">
+                <span className="text-sm text-text-secondary font-medium">Appearance</span>
+                <ThemeToggle showLabel />
+              </div>
             </div>
           </div>
         )}

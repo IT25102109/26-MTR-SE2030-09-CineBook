@@ -42,7 +42,7 @@ export function NotificationBell() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className={`relative p-2 rounded-lg hover:bg-white/5 transition-colors ${bellPulse ? 'animate-pulse-glow' : ''}`}
+        className={`relative p-2 rounded-lg hover:bg-cinema-elevated transition-colors ${bellPulse ? 'animate-pulse-glow' : ''}`}
         aria-label="Notifications"
       >
         <Bell className={`w-5 h-5 ${hasUnread ? 'text-accent-primary' : 'text-text-secondary'} hover:text-text-primary transition-colors`} />
@@ -54,8 +54,8 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-cinema-elevated/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-soft-xl overflow-hidden z-50 animate-slide-down">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+        <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-cinema-elevated/95 backdrop-blur-xl border border-cinema-border rounded-2xl shadow-soft-xl overflow-hidden z-50 animate-slide-down">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-cinema-border">
             <div className="flex items-center gap-2">
               <Bell className="w-4 h-4 text-accent-primary" />
               <h3 className="font-display font-semibold text-sm">Notifications</h3>
@@ -125,7 +125,7 @@ export function NotificationBell() {
           </div>
 
           {notifications.length > 0 && (
-            <div className="px-4 py-2.5 border-t border-white/5">
+            <div className="px-4 py-2.5 border-t border-cinema-border">
               <Link
                 to="/notifications"
                 onClick={() => setOpen(false)}

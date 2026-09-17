@@ -6,18 +6,40 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Light Mode Color Scheme (clean modern premium cinema ivory/slate) */
+    --color-cinema-base: 246 248 250;      /* #F6F8FA */
+    --color-cinema-card: 255 255 255;      /* #FFFFFF */
+    --color-cinema-elevated: 238 241 246;  /* #EEF1F6 */
+    --color-cinema-border: 226 232 240;    /* #E2E8F0 */
+    --color-text-primary: 15 23 42;        /* #0F172A */
+    --color-text-secondary: 71 85 105;     /* #475569 */
+    --color-text-muted: 148 163 184;       /* #94A3B8 */
+  }
+
+  .dark {
+    /* Dark Mode Color Scheme (CineBook's iconic cinema aesthetic) */
+    --color-cinema-base: 10 10 12;         /* #0A0A0C */
+    --color-cinema-card: 20 20 23;         /* #141417 */
+    --color-cinema-elevated: 28 28 33;     /* #1C1C21 */
+    --color-cinema-border: 30 30 36;       /* #1E1E24 */
+    --color-text-primary: 242 242 240;     /* #F2F2F0 */
+    --color-text-secondary: 138 138 148;   /* #8A8A94 */
+    --color-text-muted: 90 90 100;         /* #5A5A64 */
+  }
+
   * {
     @apply border-cinema-border;
   }
 
   body {
-    @apply bg-cinema-base text-text-primary font-body antialiased;
+    @apply bg-cinema-base text-text-primary font-body antialiased transition-colors duration-200;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    @apply font-display;
+    @apply font-display text-text-primary;
   }
 
   /* Custom scrollbar */
@@ -31,7 +53,7 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    @apply bg-cinema-elevated rounded-full;
+    @apply bg-cinema-border rounded-full;
   }
 
   ::-webkit-scrollbar-thumb:hover {
@@ -50,23 +72,23 @@
   }
 
   .glass {
-    @apply backdrop-blur-xl bg-black/40;
+    @apply backdrop-blur-xl bg-cinema-card/80 border-b border-cinema-border;
   }
 
   .hairline {
-    @apply border border-white/5;
+    @apply border border-cinema-border;
   }
 
   .text-gradient-amber {
-    @apply bg-gradient-to-r from-accent-primary to-amber-300 bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-accent-primary to-amber-400 bg-clip-text text-transparent;
   }
 
   .scrim-bottom {
-    background: linear-gradient(to top, rgba(10, 10, 12, 0.95) 0%, rgba(10, 10, 12, 0.5) 50%, transparent 100%);
+    background: linear-gradient(to top, rgb(var(--color-cinema-base) / 0.98) 0%, rgb(var(--color-cinema-base) / 0.6) 50%, transparent 100%);
   }
 
   .scrim-left {
-    background: linear-gradient(to right, rgba(10, 10, 12, 0.95) 0%, rgba(10, 10, 12, 0.7) 40%, transparent 100%);
+    background: linear-gradient(to right, rgb(var(--color-cinema-base) / 0.98) 0%, rgb(var(--color-cinema-base) / 0.7) 40%, transparent 100%);
   }
 }
 

@@ -1,14 +1,15 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
       colors: {
         cinema: {
-          base: '#0A0A0C',
-          card: '#141417',
-          elevated: '#1C1C21',
-          border: '#1E1E24',
+          base: 'rgb(var(--color-cinema-base) / <alpha-value>)',
+          card: 'rgb(var(--color-cinema-card) / <alpha-value>)',
+          elevated: 'rgb(var(--color-cinema-elevated) / <alpha-value>)',
+          border: 'rgb(var(--color-cinema-border) / <alpha-value>)',
         },
         accent: {
           primary: '#F5C518',
@@ -18,9 +19,9 @@ export default {
           'destructive-hover': '#C70812',
         },
         text: {
-          primary: '#F2F2F0',
-          secondary: '#8A8A94',
-          muted: '#5A5A64',
+          primary: 'rgb(var(--color-text-primary) / <alpha-value>)',
+          secondary: 'rgb(var(--color-text-secondary) / <alpha-value>)',
+          muted: 'rgb(var(--color-text-muted) / <alpha-value>)',
         },
       },
       fontFamily: {

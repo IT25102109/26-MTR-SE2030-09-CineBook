@@ -15,10 +15,10 @@ interface TableProps<T> {
 
 export function Table<T extends { id: string }>({ columns, data, emptyMessage = 'No data available' }: TableProps<T>) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-white/5">
+    <div className="overflow-x-auto rounded-xl border border-cinema-border">
       <table className="w-full">
         <thead>
-          <tr className="bg-cinema-elevated border-b border-white/5">
+          <tr className="bg-cinema-elevated border-b border-cinema-border">
             {columns.map(col => (
               <th
                 key={col.key}
@@ -40,7 +40,7 @@ export function Table<T extends { id: string }>({ columns, data, emptyMessage = 
             data.map((row, i) => (
               <tr
                 key={row.id}
-                className={`border-b border-white/5 hover:bg-cinema-elevated/50 transition-colors ${i % 2 === 0 ? 'bg-cinema-card' : 'bg-cinema-card/50'}`}
+                className={`border-b border-cinema-border hover:bg-cinema-elevated/50 transition-colors ${i % 2 === 0 ? 'bg-cinema-card' : 'bg-cinema-card/50'}`}
               >
                 {columns.map(col => (
                   <td key={col.key} className={`px-4 py-3 text-sm text-text-primary ${col.className || ''}`}>

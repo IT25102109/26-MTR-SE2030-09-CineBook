@@ -5,6 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CineBook — Premium Cinema Ticket Booking</title>
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('cinebook_theme');
+          var theme = saved === 'light' ? 'light' : 'dark';
+          document.documentElement.classList.add(theme);
+          document.documentElement.style.colorScheme = theme;
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

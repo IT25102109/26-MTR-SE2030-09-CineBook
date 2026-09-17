@@ -34,11 +34,11 @@ export function Modal({ open, onClose, title, children, size = 'md', footer }: M
       />
       <div className={`relative w-full ${sizes[size]} bg-cinema-card hairline rounded-2xl shadow-soft-xl animate-scale-in max-h-[90vh] flex flex-col`}>
         {title && (
-          <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-cinema-border">
             <h2 className="text-lg font-display font-semibold">{title}</h2>
             <button
               onClick={onClose}
-              className="text-text-muted hover:text-text-primary transition-colors p-1 rounded-lg hover:bg-white/5"
+              className="text-text-muted hover:text-text-primary transition-colors p-1 rounded-lg hover:bg-cinema-elevated"
             >
               <X className="w-5 h-5" />
             </button>
@@ -46,7 +46,7 @@ export function Modal({ open, onClose, title, children, size = 'md', footer }: M
         )}
         <div className="px-6 py-5 overflow-y-auto flex-1">{children}</div>
         {footer && (
-          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/5">
+          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-cinema-border">
             {footer}
           </div>
         )}
