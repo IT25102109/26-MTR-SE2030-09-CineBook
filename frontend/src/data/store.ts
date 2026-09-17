@@ -4,6 +4,8 @@ import { movieApi } from '@/api/movieApi';
 import { branchApi } from '@/api/branchApi';
 import { showtimeApi } from '@/api/showtimeApi';
 import { bookingApi } from '@/api/bookingApi';
+import { promotionApi } from '@/api/promotionApi';
+import { userApi } from '@/api/userApi';
 
 const KEYS = {
   movies: 'cinebook_movies',
@@ -24,6 +26,21 @@ const KEYS = {
 };
 
 export function seedData(): void {
+  // If legacy mock data is detected (e.g. 'm1', 'b1', 'bk1'), clear it so fresh DB data takes precedence
+  const existingMoviesRaw = localStorage.getItem(KEYS.movies);
+  const isLegacy = existingMoviesRaw && (existingMoviesRaw.includes('"id":"m1"') || existingMoviesRaw.includes('"id":"b1"'));
+  if (isLegacy) {
+    localStorage.removeItem(KEYS.movies);
+    localStorage.removeItem(KEYS.branches);
+    localStorage.removeItem(KEYS.showtimes);
+    localStorage.removeItem(KEYS.bookings);
+    localStorage.removeItem(KEYS.users);
+    localStorage.removeItem(KEYS.currentUser);
+    localStorage.removeItem(KEYS.promotions);
+    localStorage.removeItem(KEYS.reviews);
+    localStorage.removeItem(KEYS.notifications);
+  }
+
   const existingMovies = localStorage.getItem(KEYS.movies);
   if (!existingMovies || JSON.parse(existingMovies).length === 0) {
     localStorage.setItem(KEYS.movies, JSON.stringify(mockMovies));
@@ -58,11 +75,13 @@ export function seedData(): void {
 
 export async function syncFromBackend(): Promise<void> {
   try {
-    const [moviesResult, branchesResult, showtimesResult, bookingsResult] = await Promise.allSettled([
+    const [moviesResult, branchesResult, showtimesResult, bookingsResult, promosResult, usersResult] = await Promise.allSettled([
       movieApi.getMovies(),
       branchApi.getBranches(),
       showtimeApi.getShowtimes(),
       bookingApi.getBookings(),
+      promotionApi.getPromotions(),
+      userApi.getUsers(),
     ]);
 
     if (moviesResult.status === 'fulfilled' && moviesResult.value && moviesResult.value.length > 0) {
@@ -76,6 +95,12 @@ export async function syncFromBackend(): Promise<void> {
     }
     if (bookingsResult.status === 'fulfilled' && bookingsResult.value && bookingsResult.value.length > 0) {
       write(KEYS.bookings, bookingsResult.value);
+    }
+    if (promosResult.status === 'fulfilled' && promosResult.value && promosResult.value.length > 0) {
+      write(KEYS.promotions, promosResult.value);
+    }
+    if (usersResult.status === 'fulfilled' && usersResult.value && usersResult.value.length > 0) {
+      write(KEYS.users, usersResult.value);
     }
   } catch (err) {
     console.warn('Backend sync failed, using local store data:', err);
@@ -460,7 +485,7 @@ export function getUsers(): User[] {
   const users = read<User>(KEYS.users);
   return users.map(u => {
     if (u.role === 'customer' && (u.loyaltyPoints === undefined || !u.loyaltyTier)) {
-      const defaultPts = u.id === 'u1' ? 480 : u.id === 'u4' ? 1450 : u.id === 'u5' ? 860 : 120;
+      const defaultPts = (u.id === '1' || u.id === 'u1') ? 480 : (u.id === '4' || u.id === 'u4') ? 1450 : (u.id === '5' || u.id === 'u5') ? 860 : 120;
       return {
         ...u,
         loyaltyPoints: defaultPts,
@@ -476,14 +501,24 @@ export function saveUser(user: User): void {
   const idx = users.findIndex(u => u.id === user.id);
   if (idx >= 0) {
     users[idx] = user;
+    userApi.updateUser(user.id, user).catch(err =>
+      console.warn('API updateUser sync failed, changes kept locally:', err)
+    );
   } else {
-    users.push({ ...user, id: `u${Date.now()}` });
+    const localId = user.id || String(Date.now());
+    users.push({ ...user, id: localId });
+    userApi.createUser(user).catch(err =>
+      console.warn('API createUser sync failed, changes kept locally:', err)
+    );
   }
   write(KEYS.users, users);
 }
 
 export function deleteUser(id: string): void {
   write(KEYS.users, getUsers().filter(u => u.id !== id));
+  userApi.deleteUser(id).catch(err =>
+    console.warn('API deleteUser sync failed, deletion kept locally:', err)
+  );
 }
 
 // Auth
@@ -673,14 +708,23 @@ export function savePromotion(promo: Promotion): void {
   const idx = promos.findIndex(p => p.id === promo.id);
   if (idx >= 0) {
     promos[idx] = promo;
+    promotionApi.updatePromotion(promo.id, promo).catch(err =>
+      console.warn('API updatePromotion sync failed, changes kept locally:', err)
+    );
   } else {
     promos.push(promo);
+    promotionApi.createPromotion(promo).catch(err =>
+      console.warn('API createPromotion sync failed, changes kept locally:', err)
+    );
   }
   write(KEYS.promotions, promos);
 }
 
 export function deletePromotion(id: string): void {
   write(KEYS.promotions, getPromotions().filter(p => p.id !== id));
+  promotionApi.deletePromotion(id).catch(err =>
+    console.warn('API deletePromotion sync failed, deletion kept locally:', err)
+  );
 }
 
 export function validatePromoCode(code: string, subtotal: number): { valid: boolean; discount: number; message: string; promo?: Promotion } {

@@ -4,3 +4,5 @@ export * from './branchApi';
 export * from './showtimeApi';
 export * from './bookingApi';
 export * from './analyticsApi';
+export * from './userApi';
+export * from './promotionApi';
