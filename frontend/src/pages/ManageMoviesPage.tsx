@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import { Plus, Search, Edit2, Trash2, Film } from 'lucide-react';
-import { getMovies, saveMovie, deleteMovie } from '@/data/store';
+import { useEffect, useState, useMemo } from 'react';
+import { Plus, Search, Edit2, Trash2, Film, MessageSquare, CheckCircle, XCircle, Star } from 'lucide-react';
+import { getMovies, saveMovie, deleteMovie, getAllReviewsForModeration, updateReviewStatus, deleteReview } from '@/data/store';
 import { movieApi } from '@/api/movieApi';
 import { useToast } from '@/contexts/ToastContext';
 import { Button } from '@/components/ui/Button';
@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { Input, Select, Textarea } from '@/components/ui/Input';
-import type { Movie } from '@/types';
+import type { Movie, MovieReview } from '@/types';
 
 const emptyMovie: Omit<Movie, 'id'> = {
   title: '',
@@ -41,6 +41,17 @@ export function ManageMoviesPage() {
   const [genreInput, setGenreInput] = useState('');
   const [castInput, setCastInput] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Movie | null>(null);
+
+  const [reviewsModalOpen, setReviewsModalOpen] = useState(false);
+  const [reviewTick, setReviewTick] = useState(0);
+  const [reviewFilter, setReviewFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
+
+  const allReviews = useMemo(() => getAllReviewsForModeration(), [reviewTick]);
+  const pendingReviewsCount = useMemo(() => allReviews.filter(r => r.status === 'pending').length, [allReviews]);
+  const filteredReviews = useMemo(() => {
+    if (reviewFilter === 'all') return allReviews;
+    return allReviews.filter(r => r.status === reviewFilter);
+  }, [allReviews, reviewFilter]);
 
   // Fetch live movies from backend API or local store on mount
   const loadMovies = async () => {
@@ -138,6 +149,19 @@ export function ManageMoviesPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => setReviewsModalOpen(true)}
+            className="text-xs h-9 relative flex items-center gap-1.5"
+          >
+            <MessageSquare className="w-4 h-4 text-accent-primary" />
+            Review Moderation
+            {pendingReviewsCount > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full animate-pulse">
+                {pendingReviewsCount} Pending
+              </span>
+            )}
+          </Button>
           <Button onClick={openCreate} className="text-xs h-9">
             <Plus className="w-4 h-4 mr-1" /> Add Movie
           </Button>
@@ -293,6 +317,151 @@ export function ManageMoviesPage() {
         <p className="text-sm text-text-secondary">
           Are you sure you want to delete <span className="font-medium text-text-primary">{deleteTarget?.title}</span>? This action will remove the movie from the catalog.
         </p>
+      </Modal>
+
+      {/* Audience Review Moderation Modal */}
+      <Modal
+        open={reviewsModalOpen}
+        onClose={() => setReviewsModalOpen(false)}
+        title="Audience Review Moderation"
+        size="lg"
+        footer={<Button variant="ghost" onClick={() => setReviewsModalOpen(false)}>Close</Button>}
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-text-secondary">
+            Manage customer reviews before or after publication. Community reviews require staff approval before displaying publicly.
+          </p>
+
+          {/* Filter tabs */}
+          <div className="flex gap-2 border-b border-cinema-border pb-3 flex-wrap">
+            <button
+              onClick={() => setReviewFilter('pending')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                reviewFilter === 'pending'
+                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                  : 'text-text-muted hover:text-text-primary hover:bg-white/5'
+              }`}
+            >
+              Pending ({pendingReviewsCount})
+            </button>
+            <button
+              onClick={() => setReviewFilter('approved')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                reviewFilter === 'approved'
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                  : 'text-text-muted hover:text-text-primary hover:bg-white/5'
+              }`}
+            >
+              Approved ({allReviews.filter(r => r.status === 'approved').length})
+            </button>
+            <button
+              onClick={() => setReviewFilter('rejected')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                reviewFilter === 'rejected'
+                  ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                  : 'text-text-muted hover:text-text-primary hover:bg-white/5'
+              }`}
+            >
+              Rejected ({allReviews.filter(r => r.status === 'rejected').length})
+            </button>
+            <button
+              onClick={() => setReviewFilter('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                reviewFilter === 'all'
+                  ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary/30'
+                  : 'text-text-muted hover:text-text-primary hover:bg-white/5'
+              }`}
+            >
+              All ({allReviews.length})
+            </button>
+          </div>
+
+          {filteredReviews.length === 0 ? (
+            <div className="py-8 text-center text-text-muted">
+              <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-40" />
+              <p className="text-sm">
+                {reviewFilter === 'pending'
+                  ? 'No pending reviews! All audience reviews have been moderated.'
+                  : `No ${reviewFilter} reviews found.`}
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-cinema-border max-h-[60vh] overflow-y-auto pr-1 space-y-3">
+              {filteredReviews.map(r => {
+                const movie = movies.find(m => m.id === r.movieId);
+                return (
+                  <div key={r.id} className="pt-3 first:pt-0 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="font-semibold text-sm text-text-primary">{r.userName}</span>
+                        <Badge variant="default" className="text-[11px]">{movie?.title || 'Movie'}</Badge>
+                        <Badge
+                          variant={r.status === 'approved' ? 'green' : r.status === 'rejected' ? 'red' : 'amber'}
+                          className="text-[10px]"
+                        >
+                          {r.status.toUpperCase()}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-text-secondary leading-relaxed">{r.comment}</p>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <div className="flex items-center gap-0.5 text-accent-primary">
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <Star key={i} className={`w-3 h-3 ${i < r.rating ? 'fill-accent-primary' : 'text-text-muted opacity-30'}`} />
+                          ))}
+                        </div>
+                        <span className="text-xs text-text-muted">Rating: {r.rating}/5</span>
+                        <span className="text-xs text-text-muted">•</span>
+                        <span className="text-xs text-text-muted">{r.createdAt}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0 self-end sm:self-center">
+                      {r.status !== 'approved' && (
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            updateReviewStatus(r.id, 'approved');
+                            setReviewTick(t => t + 1);
+                            toast('success', `Approved review by ${r.userName}`);
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs h-8 px-2.5 flex items-center gap-1 font-semibold"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" /> Approve
+                        </Button>
+                      )}
+                      {r.status !== 'rejected' && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            updateReviewStatus(r.id, 'rejected');
+                            setReviewTick(t => t + 1);
+                            toast('error', `Rejected review by ${r.userName}`);
+                          }}
+                          className="text-red-400 hover:bg-red-500/10 text-xs h-8 px-2.5 flex items-center gap-1"
+                        >
+                          <XCircle className="w-3.5 h-3.5" /> Reject
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          deleteReview(r.id);
+                          setReviewTick(t => t + 1);
+                          toast('success', 'Review deleted');
+                        }}
+                        className="text-text-muted hover:text-red-400 text-xs h-8 p-1.5"
+                        title="Delete review"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </Modal>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Plus, Search, Trash2, Calendar, Clock, Film, MapPin, Tag, CheckCircle, XCircle, Sparkles, MessageSquare, AlertTriangle, Copy, Shield, Lock } from 'lucide-react';
-import { getShowtimes, getMovies, getBranches, saveShowtime, deleteShowtime, getPromotions, savePromotion, deletePromotion, getAllReviewsForModeration, updateReviewStatus } from '@/data/store';
+import { Plus, Search, Trash2, Calendar, Clock, Film, MapPin, Tag, CheckCircle, XCircle, Sparkles, MessageSquare, AlertTriangle, Copy, Shield, Lock, Star } from 'lucide-react';
+import { getShowtimes, getMovies, getBranches, saveShowtime, deleteShowtime, getPromotions, savePromotion, deletePromotion, getAllReviewsForModeration, updateReviewStatus, deleteReview } from '@/data/store';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { Button } from '@/components/ui/Button';
@@ -23,6 +23,13 @@ export function ManageShowtimesPage() {
   const branches = useMemo(() => getBranches(), []);
   const promotions = useMemo(() => getPromotions(), [tick]);
   const reviews = useMemo(() => getAllReviewsForModeration(), [tick]);
+
+  const [reviewFilter, setReviewFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
+  const pendingReviewsCount = useMemo(() => reviews.filter(r => r.status === 'pending').length, [reviews]);
+  const filteredReviews = useMemo(() => {
+    if (reviewFilter === 'all') return reviews;
+    return reviews.filter(r => r.status === reviewFilter);
+  }, [reviews, reviewFilter]);
 
   const isCinemaManager = user?.role === 'cinemaManager';
   const assignedBranchId = user?.assignedBranchId;
@@ -236,8 +243,15 @@ export function ManageShowtimesPage() {
           <Button variant="outline" onClick={() => setCloneModalOpen(true)} className="flex items-center gap-1.5">
             <Copy className="w-4 h-4" /> Bulk Clone
           </Button>
-          <Button variant="outline" onClick={() => setReviewsModalOpen(true)} className="flex items-center gap-1.5">
-            <MessageSquare className="w-4 h-4" /> Moderation ({reviews.length})
+          <Button variant="outline" onClick={() => setReviewsModalOpen(true)} className="flex items-center gap-1.5 relative">
+            <MessageSquare className="w-4 h-4 text-accent-primary" /> Review Moderation
+            {pendingReviewsCount > 0 ? (
+              <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full animate-pulse">
+                {pendingReviewsCount} Pending
+              </span>
+            ) : (
+              <span className="text-xs text-text-muted">({reviews.length})</span>
+            )}
           </Button>
           <Button variant="outline" onClick={() => setPromoModalOpen(true)} className="flex items-center gap-1.5">
             <Tag className="w-4 h-4" /> Promo Codes ({promotions.length})
@@ -566,39 +580,104 @@ export function ManageShowtimesPage() {
         footer={<Button variant="ghost" onClick={() => setReviewsModalOpen(false)}>Close</Button>}
       >
         <div className="space-y-4">
-          <p className="text-xs text-text-secondary">Approve or reject community reviews before or after publication.</p>
-          {reviews.length === 0 ? (
-            <p className="text-sm text-text-muted text-center py-6">No reviews submitted yet.</p>
+          <p className="text-xs text-text-secondary">
+            Manage customer reviews before or after publication. Community reviews require staff approval before displaying publicly.
+          </p>
+
+          {/* Filter tabs */}
+          <div className="flex gap-2 border-b border-cinema-border pb-3 flex-wrap">
+            <button
+              onClick={() => setReviewFilter('pending')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                reviewFilter === 'pending'
+                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                  : 'text-text-muted hover:text-text-primary hover:bg-white/5'
+              }`}
+            >
+              Pending ({pendingReviewsCount})
+            </button>
+            <button
+              onClick={() => setReviewFilter('approved')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                reviewFilter === 'approved'
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                  : 'text-text-muted hover:text-text-primary hover:bg-white/5'
+              }`}
+            >
+              Approved ({reviews.filter(r => r.status === 'approved').length})
+            </button>
+            <button
+              onClick={() => setReviewFilter('rejected')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                reviewFilter === 'rejected'
+                  ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                  : 'text-text-muted hover:text-text-primary hover:bg-white/5'
+              }`}
+            >
+              Rejected ({reviews.filter(r => r.status === 'rejected').length})
+            </button>
+            <button
+              onClick={() => setReviewFilter('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                reviewFilter === 'all'
+                  ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary/30'
+                  : 'text-text-muted hover:text-text-primary hover:bg-white/5'
+              }`}
+            >
+              All ({reviews.length})
+            </button>
+          </div>
+
+          {filteredReviews.length === 0 ? (
+            <div className="py-8 text-center text-text-muted">
+              <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-40" />
+              <p className="text-sm">
+                {reviewFilter === 'pending'
+                  ? 'No pending reviews! All audience reviews have been moderated.'
+                  : `No ${reviewFilter} reviews found.`}
+              </p>
+            </div>
           ) : (
-            <div className="divide-y divide-white/5">
-              {reviews.map(r => {
+            <div className="divide-y divide-cinema-border max-h-[60vh] overflow-y-auto pr-1 space-y-3">
+              {filteredReviews.map(r => {
                 const movie = movies.find(m => m.id === r.movieId);
                 return (
-                  <div key={r.id} className="py-3 flex items-start justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-semibold text-sm">{r.userName}</span>
-                        <Badge variant="default">{movie?.title || 'Movie'}</Badge>
-                        <Badge variant={r.status === 'approved' ? 'green' : r.status === 'rejected' ? 'red' : 'amber'}>
+                  <div key={r.id} className="pt-3 first:pt-0 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="font-semibold text-sm text-text-primary">{r.userName}</span>
+                        <Badge variant="default" className="text-[11px]">{movie?.title || 'Movie'}</Badge>
+                        <Badge
+                          variant={r.status === 'approved' ? 'green' : r.status === 'rejected' ? 'red' : 'amber'}
+                          className="text-[10px]"
+                        >
                           {r.status.toUpperCase()}
                         </Badge>
                       </div>
-                      <p className="text-sm text-text-secondary">{r.comment}</p>
-                      <span className="text-xs text-text-muted mt-1 block">Rating: {r.rating}/5 • Date: {r.createdAt}</span>
+                      <p className="text-sm text-text-secondary leading-relaxed">{r.comment}</p>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <div className="flex items-center gap-0.5 text-accent-primary">
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <Star key={i} className={`w-3 h-3 ${i < r.rating ? 'fill-accent-primary' : 'text-text-muted opacity-30'}`} />
+                          ))}
+                        </div>
+                        <span className="text-xs text-text-muted">Rating: {r.rating}/5</span>
+                        <span className="text-xs text-text-muted">•</span>
+                        <span className="text-xs text-text-muted">{r.createdAt}</span>
+                      </div>
                     </div>
-                    <div className="flex gap-1.5 flex-shrink-0">
+                    <div className="flex items-center gap-1.5 flex-shrink-0 self-end sm:self-center">
                       {r.status !== 'approved' && (
                         <Button
                           size="sm"
-                          variant="ghost"
                           onClick={() => {
                             updateReviewStatus(r.id, 'approved');
                             setTick(t => t + 1);
-                            toast('success', 'Review approved');
+                            toast('success', `Approved review by ${r.userName}`);
                           }}
-                          className="text-emerald-400 hover:bg-emerald-500/10"
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs h-8 px-2.5 flex items-center gap-1 font-semibold"
                         >
-                          <CheckCircle className="w-4 h-4" />
+                          <CheckCircle className="w-3.5 h-3.5" /> Approve
                         </Button>
                       )}
                       {r.status !== 'rejected' && (
@@ -608,13 +687,26 @@ export function ManageShowtimesPage() {
                           onClick={() => {
                             updateReviewStatus(r.id, 'rejected');
                             setTick(t => t + 1);
-                            toast('error', 'Review rejected');
+                            toast('error', `Rejected review by ${r.userName}`);
                           }}
-                          className="text-red-400 hover:bg-red-500/10"
+                          className="text-red-400 hover:bg-red-500/10 text-xs h-8 px-2.5 flex items-center gap-1"
                         >
-                          <XCircle className="w-4 h-4" />
+                          <XCircle className="w-3.5 h-3.5" /> Reject
                         </Button>
                       )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          deleteReview(r.id);
+                          setTick(t => t + 1);
+                          toast('success', 'Review deleted');
+                        }}
+                        className="text-text-muted hover:text-red-400 text-xs h-8 p-1.5"
+                        title="Delete review"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
                     </div>
                   </div>
                 );

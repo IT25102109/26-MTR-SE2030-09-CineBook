@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Star, Clock, Calendar, Film, Play, ChevronLeft, MapPin, X, MessageSquare, ThumbsUp, Send, User } from 'lucide-react';
-import { getMovie, getShowtimesByMovie, getBranches, getBranch, getMovieReviews, saveReview } from '@/data/store';
+import { Star, Clock, Calendar, Film, Play, ChevronLeft, MapPin, X, MessageSquare, ThumbsUp, Send, User, CheckCircle, XCircle, ShieldCheck, Trash2 } from 'lucide-react';
+import { getMovie, getShowtimesByMovie, getBranches, getBranch, getMovieReviews, getMovieAllReviews, saveReview, updateReviewStatus, deleteReview } from '@/data/store';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
@@ -14,8 +14,10 @@ import type { MovieReview } from '@/types';
 export function MovieDetailsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user, login } = useAuth();
+  const { user, login, hasRole } = useAuth();
   const { toast } = useToast();
+
+  const isManagerOrAdmin = hasRole('admin', 'cinemaManager');
 
   const movie = useMemo(() => id ? getMovie(id) : undefined, [id]);
   const showtimes = useMemo(() => id ? getShowtimesByMovie(id) : [], [id]);
@@ -25,12 +27,28 @@ export function MovieDetailsPage() {
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [isTrailerOpen, setIsTrailerOpen] = useState(false);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [moderationTab, setModerationTab] = useState<'approved' | 'pending' | 'all'>('approved');
   const [newRating, setNewRating] = useState(5);
   const [newComment, setNewComment] = useState('');
   const [authorName, setAuthorName] = useState('');
   const [reviewTick, setReviewTick] = useState(0);
 
-  const reviews = useMemo(() => id ? getMovieReviews(id) : [], [id, reviewTick]);
+  const allMovieReviews = useMemo(() => id ? getMovieAllReviews(id) : [], [id, reviewTick]);
+  const approvedReviews = useMemo(() => allMovieReviews.filter(r => r.status === 'approved'), [allMovieReviews]);
+  const pendingReviews = useMemo(() => allMovieReviews.filter(r => r.status === 'pending'), [allMovieReviews]);
+  const rejectedReviews = useMemo(() => allMovieReviews.filter(r => r.status === 'rejected'), [allMovieReviews]);
+
+  const userPendingReview = useMemo(() => {
+    if (!user) return null;
+    return allMovieReviews.find(r => r.userId === user.id && r.status === 'pending');
+  }, [allMovieReviews, user]);
+
+  const displayedReviews = useMemo(() => {
+    if (!isManagerOrAdmin) return approvedReviews;
+    if (moderationTab === 'pending') return pendingReviews;
+    if (moderationTab === 'all') return allMovieReviews;
+    return approvedReviews;
+  }, [isManagerOrAdmin, moderationTab, approvedReviews, pendingReviews, allMovieReviews]);
 
 
   const dates = useMemo(() => {
@@ -92,7 +110,7 @@ export function MovieDetailsPage() {
       rating: newRating,
       comment: newComment.trim(),
       createdAt: new Date().toISOString().split('T')[0],
-      status: 'approved',
+      status: 'pending',
     };
 
     saveReview(review);
@@ -101,7 +119,25 @@ export function MovieDetailsPage() {
     setAuthorName('');
     setIsReviewModalOpen(false);
     setReviewTick(t => t + 1);
-    toast('success', 'Thank you! Your review has been published.');
+    toast('info', 'Thank you! Your review has been submitted for moderation. It will appear once approved by cinema staff.');
+  };
+
+  const handleApproveReview = (reviewId: string) => {
+    updateReviewStatus(reviewId, 'approved');
+    setReviewTick(t => t + 1);
+    toast('success', 'Review approved and published to public catalog!');
+  };
+
+  const handleRejectReview = (reviewId: string) => {
+    updateReviewStatus(reviewId, 'rejected');
+    setReviewTick(t => t + 1);
+    toast('error', 'Review rejected.');
+  };
+
+  const handleDeleteReview = (reviewId: string) => {
+    deleteReview(reviewId);
+    setReviewTick(t => t + 1);
+    toast('success', 'Review deleted.');
   };
 
   return (
@@ -280,24 +316,102 @@ export function MovieDetailsPage() {
 
         {/* Customer Reviews Section */}
         <section className="mt-16 border-t border-cinema-border pt-10">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
-              <h2 className="text-2xl font-display font-bold">Audience Reviews & Ratings</h2>
-              <p className="text-sm text-text-secondary mt-1">Verified audience opinions and community impressions</p>
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-2xl font-display font-bold">Audience Reviews & Ratings</h2>
+                {isManagerOrAdmin && (
+                  <Badge variant="amber" className="flex items-center gap-1 text-[11px]">
+                    <ShieldCheck className="w-3.5 h-3.5" /> Staff Moderation Active
+                  </Badge>
+                )}
+              </div>
+              <p className="text-sm text-text-secondary mt-1">
+                {isManagerOrAdmin
+                  ? 'Review, approve, or reject customer feedback before public release'
+                  : 'Verified audience opinions and community impressions (curated by cinema management)'}
+              </p>
             </div>
-            <Button onClick={handleOpenReviewModal} className="flex items-center gap-2">
-              <MessageSquare className="w-4 h-4" /> Write a Review
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button onClick={handleOpenReviewModal} className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4" /> Write a Review
+              </Button>
+            </div>
           </div>
 
-          {reviews.length === 0 ? (
+          {/* Admin & Cinema Manager Moderation Filter Tabs */}
+          {isManagerOrAdmin && (
+            <div className="flex gap-2 p-1.5 bg-cinema-card hairline rounded-xl mb-6 overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setModerationTab('approved')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                  moderationTab === 'approved'
+                    ? 'bg-accent-primary text-black shadow'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-cinema-elevated'
+                }`}
+              >
+                Approved Live ({approvedReviews.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setModerationTab('pending')}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                  moderationTab === 'pending'
+                    ? 'bg-amber-500 text-black shadow font-bold'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-cinema-elevated'
+                }`}
+              >
+                Pending Moderation ({pendingReviews.length})
+                {pendingReviews.length > 0 && (
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setModerationTab('all')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                  moderationTab === 'all'
+                    ? 'bg-accent-primary text-black shadow'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-cinema-elevated'
+                }`}
+              >
+                All Reviews ({allMovieReviews.length})
+              </button>
+            </div>
+          )}
+
+          {/* User's own pending review notification banner */}
+          {userPendingReview && !isManagerOrAdmin && (
+            <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3 animate-fade-in">
+              <Clock className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-sm font-semibold text-text-primary">Your Review is Pending Staff Moderation</span>
+                  <Badge variant="amber" className="text-[10px]">In Review Queue</Badge>
+                </div>
+                <p className="text-xs text-text-secondary leading-relaxed italic">
+                  "{userPendingReview.comment}"
+                </p>
+                <span className="text-[11px] text-text-muted mt-1 block">
+                  Rated {userPendingReview.rating}/5 stars • Submitted on {userPendingReview.createdAt}. Once approved by our cinema manager or admin, it will appear publicly here.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {displayedReviews.length === 0 ? (
             <Card className="p-8 text-center text-text-muted">
               <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-40" />
-              <p>No reviews yet for this movie. Be the first to share your thoughts!</p>
+              <p>
+                {moderationTab === 'pending' && isManagerOrAdmin
+                  ? 'All caught up! No reviews currently awaiting moderation.'
+                  : 'No reviews yet for this movie. Be the first to share your thoughts!'}
+              </p>
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {reviews.map(r => (
+              {displayedReviews.map(r => (
                 <Card key={r.id} className="p-5 flex flex-col justify-between">
                   <div>
                     <div className="flex items-center justify-between mb-3">
@@ -306,7 +420,23 @@ export function MovieDetailsPage() {
                           {r.userName.charAt(0)}
                         </div>
                         <div>
-                          <p className="text-sm font-semibold">{r.userName}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold">{r.userName}</p>
+                            {isManagerOrAdmin && (
+                              <Badge
+                                variant={
+                                  r.status === 'approved'
+                                    ? 'green'
+                                    : r.status === 'rejected'
+                                    ? 'red'
+                                    : 'amber'
+                                }
+                                className="text-[10px]"
+                              >
+                                {r.status.toUpperCase()}
+                              </Badge>
+                            )}
+                          </div>
                           <p className="text-xs text-text-muted">{r.createdAt}</p>
                         </div>
                       </div>
@@ -318,9 +448,46 @@ export function MovieDetailsPage() {
                     </div>
                     <p className="text-sm text-text-secondary leading-relaxed">{r.comment}</p>
                   </div>
-                  <div className="mt-4 pt-3 border-t border-cinema-border flex items-center gap-2 text-xs text-text-muted">
-                    <ThumbsUp className="w-3 h-3" /> Helpful review
-                  </div>
+
+                  {isManagerOrAdmin ? (
+                    <div className="mt-4 pt-3 border-t border-cinema-border flex items-center justify-between gap-2">
+                      <span className="text-xs text-text-muted">Staff Actions:</span>
+                      <div className="flex items-center gap-1.5">
+                        {r.status !== 'approved' && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleApproveReview(r.id)}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs h-7 px-2.5 flex items-center gap-1 font-semibold"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" /> Approve & Publish
+                          </Button>
+                        )}
+                        {r.status !== 'rejected' && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleRejectReview(r.id)}
+                            className="text-accent-destructive hover:bg-accent-destructive/10 text-xs h-7 px-2.5 flex items-center gap-1"
+                          >
+                            <XCircle className="w-3.5 h-3.5" /> Reject
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleDeleteReview(r.id)}
+                          className="text-text-muted hover:text-accent-destructive text-xs h-7 p-1"
+                          title="Delete review"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-4 pt-3 border-t border-cinema-border flex items-center gap-2 text-xs text-text-muted">
+                      <ThumbsUp className="w-3 h-3" /> Helpful review
+                    </div>
+                  )}
                 </Card>
               ))}
             </div>

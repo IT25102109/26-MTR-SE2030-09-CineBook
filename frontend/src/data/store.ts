@@ -673,6 +673,10 @@ export function getMovieReviews(movieId: string): MovieReview[] {
   return getReviews().filter(r => r.movieId === movieId && r.status === 'approved');
 }
 
+export function getMovieAllReviews(movieId: string): MovieReview[] {
+  return getReviews().filter(r => r.movieId === movieId);
+}
+
 export function getAllReviewsForModeration(): MovieReview[] {
   return getReviews();
 }
@@ -688,13 +692,18 @@ export function saveReview(review: MovieReview): void {
   write(KEYS.reviews, reviews);
 }
 
-export function updateReviewStatus(reviewId: string, status: 'approved' | 'rejected'): void {
+export function updateReviewStatus(reviewId: string, status: 'approved' | 'rejected' | 'pending'): void {
   const reviews = getReviews();
   const idx = reviews.findIndex(r => r.id === reviewId);
   if (idx >= 0) {
     reviews[idx].status = status;
     write(KEYS.reviews, reviews);
   }
+}
+
+export function deleteReview(reviewId: string): void {
+  const reviews = getReviews().filter(r => r.id !== reviewId);
+  write(KEYS.reviews, reviews);
 }
 
 // Promotions & Discounts

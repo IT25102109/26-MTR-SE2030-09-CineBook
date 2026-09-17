@@ -457,6 +457,16 @@ export const mockMovieReviews: MovieReview[] = [
     createdAt: '2026-02-20',
     status: 'approved',
   },
+  {
+    id: '5',
+    movieId: '1',
+    userId: '2',
+    userName: 'Kavinda Perera',
+    rating: 4,
+    comment: 'Brilliant cinematography in the historical sequences. The audio mix in Dolby Atmos was breathtaking.',
+    createdAt: '2026-09-17',
+    status: 'pending',
+  },
 ];
 
 export const mockPromotions: Promotion[] = [
