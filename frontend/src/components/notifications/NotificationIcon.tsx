@@ -1,6 +1,6 @@
 import {
   Ticket, RotateCcw, Clock, Tag, Megaphone, Film, AlertTriangle,
-  Calendar, TrendingUp, UserPlus, Bell, type LucideIcon,
+  Calendar, TrendingUp, UserPlus, Bell, MessageSquare, CheckCircle, XCircle, type LucideIcon,
 } from 'lucide-react';
 import type { NotificationType } from '@/types';
 
@@ -16,6 +16,9 @@ const iconMap: Record<NotificationType, LucideIcon> = {
   scheduling_conflict: AlertTriangle,
   revenue_milestone: TrendingUp,
   user_registration: UserPlus,
+  review_pending: MessageSquare,
+  review_approved: CheckCircle,
+  review_rejected: XCircle,
 };
 
 const colorMap: Record<NotificationType, string> = {
@@ -30,6 +33,9 @@ const colorMap: Record<NotificationType, string> = {
   scheduling_conflict: '#F97316',
   revenue_milestone: '#F5C518',
   user_registration: '#06B6D4',
+  review_pending: '#F59E0B',
+  review_approved: '#10B981',
+  review_rejected: '#EF4444',
 };
 
 export function NotificationIcon({ type, className = 'w-4 h-4' }: { type: NotificationType; className?: string }) {

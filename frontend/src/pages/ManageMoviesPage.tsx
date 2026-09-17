@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { Plus, Search, Edit2, Trash2, Film, MessageSquare, CheckCircle, XCircle, Star } from 'lucide-react';
 import { getMovies, saveMovie, deleteMovie, getAllReviewsForModeration, updateReviewStatus, deleteReview } from '@/data/store';
 import { movieApi } from '@/api/movieApi';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -29,6 +30,7 @@ const emptyMovie: Omit<Movie, 'id'> = {
 };
 
 export function ManageMoviesPage() {
+  const { user } = useAuth();
   const { toast } = useToast();
   const [movies, setMovies] = useState<Movie[]>(() => getMovies());
   const [loading, setLoading] = useState(false);
@@ -419,7 +421,7 @@ export function ManageMoviesPage() {
                         <Button
                           size="sm"
                           onClick={() => {
-                            updateReviewStatus(r.id, 'approved');
+                            updateReviewStatus(r.id, 'approved', user);
                             setReviewTick(t => t + 1);
                             toast('success', `Approved review by ${r.userName}`);
                           }}
@@ -433,7 +435,7 @@ export function ManageMoviesPage() {
                           size="sm"
                           variant="ghost"
                           onClick={() => {
-                            updateReviewStatus(r.id, 'rejected');
+                            updateReviewStatus(r.id, 'rejected', user);
                             setReviewTick(t => t + 1);
                             toast('error', `Rejected review by ${r.userName}`);
                           }}
@@ -446,7 +448,7 @@ export function ManageMoviesPage() {
                         size="sm"
                         variant="ghost"
                         onClick={() => {
-                          deleteReview(r.id);
+                          deleteReview(r.id, user);
                           setReviewTick(t => t + 1);
                           toast('success', 'Review deleted');
                         }}

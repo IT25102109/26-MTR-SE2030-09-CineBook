@@ -57,8 +57,12 @@ export function seedData(): void {
   if (!localStorage.getItem(KEYS.users)) {
     localStorage.setItem(KEYS.users, JSON.stringify(mockAdminUsers));
   }
-  if (!localStorage.getItem(KEYS.notifications)) {
+  const existingNotifications = localStorage.getItem(KEYS.notifications);
+  if (!existingNotifications || JSON.parse(existingNotifications || '[]').length === 0) {
     localStorage.setItem(KEYS.notifications, JSON.stringify(mockNotifications));
+  }
+  if (!localStorage.getItem(KEYS.currentUser)) {
+    localStorage.setItem(KEYS.currentUser, JSON.stringify(mockUsers[0]));
   }
   if (!localStorage.getItem(KEYS.notificationTemplates)) {
     localStorage.setItem(KEYS.notificationTemplates, JSON.stringify(mockNotificationTemplates));
@@ -559,19 +563,47 @@ export function getHall(branchId: string, hallId: string) {
 
 // Notifications
 export function getNotifications(): Notification[] {
-  return read<Notification>(KEYS.notifications);
+  const list = read<Notification>(KEYS.notifications);
+  if (!list || list.length === 0) {
+    write(KEYS.notifications, mockNotifications);
+    return mockNotifications;
+  }
+  return list;
 }
 
 export function getUserNotifications(userId: string): Notification[] {
+  const allUsers = getUsers();
+  const currentUser = allUsers.find(u => u.id === userId) || getCurrentUser();
+  const currentRole = currentUser?.role?.toLowerCase();
+  const currentBranchId = currentUser?.assignedBranchId;
+
   return getNotifications()
-    .filter(n => n.userId === userId)
+    .filter(n => {
+      // 1. Direct recipient
+      if (n.userId === userId) return true;
+      // 2. Broadcast to all users
+      if (n.audience === 'all') return true;
+      // 3. Broadcast to specific role (e.g. 'admin', 'cinemamanager', 'customer')
+      if (n.audience === 'role' && currentRole && n.audienceTarget?.toLowerCase() === currentRole) return true;
+      // 4. Broadcast to specific cinema branch
+      if (n.audience === 'branch' && currentBranchId && n.audienceTarget === currentBranchId) return true;
+      return false;
+    })
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
 export function saveNotification(notification: Notification): void {
   const notifications = getNotifications();
-  notifications.push(notification);
+  const existingIdx = notifications.findIndex(n => n.id === notification.id);
+  if (existingIdx >= 0) {
+    notifications[existingIdx] = notification;
+  } else {
+    notifications.unshift(notification);
+  }
   write(KEYS.notifications, notifications);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('cinebook:notifications_updated'));
+  }
 }
 
 export function markNotificationRead(id: string): void {
@@ -581,22 +613,31 @@ export function markNotificationRead(id: string): void {
     notifications[idx].read = true;
     if (notifications[idx].status === 'sent') notifications[idx].status = 'read';
     write(KEYS.notifications, notifications);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('cinebook:notifications_updated'));
+    }
   }
 }
 
 export function markAllNotificationsRead(userId: string): void {
   const notifications = getNotifications();
   notifications.forEach(n => {
-    if (n.userId === userId) {
+    if (n.userId === userId || n.audience === 'all') {
       n.read = true;
       if (n.status === 'sent') n.status = 'read';
     }
   });
   write(KEYS.notifications, notifications);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('cinebook:notifications_updated'));
+  }
 }
 
 export function deleteNotification(id: string): void {
   write(KEYS.notifications, getNotifications().filter(n => n.id !== id));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('cinebook:notifications_updated'));
+  }
 }
 
 export function broadcastNotification(
@@ -606,7 +647,7 @@ export function broadcastNotification(
   const notifications = getNotifications();
   const now = new Date().toISOString();
   targetUserIds.forEach(userId => {
-    notifications.push({
+    notifications.unshift({
       ...notification,
       id: `n${Date.now()}_${userId}_${Math.random().toString(36).slice(2, 6)}`,
       userId,
@@ -616,6 +657,9 @@ export function broadcastNotification(
     });
   });
   write(KEYS.notifications, notifications);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('cinebook:notifications_updated'));
+  }
 }
 
 // Notification Templates
@@ -690,20 +734,159 @@ export function saveReview(review: MovieReview): void {
     reviews.unshift(review);
   }
   write(KEYS.reviews, reviews);
-}
 
-export function updateReviewStatus(reviewId: string, status: 'approved' | 'rejected' | 'pending'): void {
-  const reviews = getReviews();
-  const idx = reviews.findIndex(r => r.id === reviewId);
-  if (idx >= 0) {
-    reviews[idx].status = status;
-    write(KEYS.reviews, reviews);
+  // Notify all roles upon review submission
+  const movie = getMovie(review.movieId);
+  const movieTitle = movie ? movie.title : 'Movie';
+
+  // 1. Notify the customer who wrote the review
+  if (review.userId && !review.userId.startsWith('guest_')) {
+    saveNotification({
+      id: `n_rev_sub_${Date.now()}_${review.userId}`,
+      type: 'review_pending',
+      title: 'Review Submitted (Pending Approval)',
+      message: `Your ${review.rating}★ review for "${movieTitle}" has been received and is awaiting staff moderation.`,
+      userId: review.userId,
+      read: false,
+      createdAt: new Date().toISOString(),
+      link: `/movies/${review.movieId}`,
+      status: 'sent',
+    });
+  }
+
+  // 2. Notify all Cinema Managers and Admins
+  const staffUsers = getUsers().filter(u => u.role === 'admin' || u.role === 'cinemaManager');
+  staffUsers.forEach(staff => {
+    if (staff.id !== review.userId) {
+      saveNotification({
+        id: `n_staff_pending_${Date.now()}_${staff.id}`,
+        type: 'review_pending',
+        title: 'New Review Pending Moderation',
+        message: `${review.userName} submitted a ${review.rating}★ review for "${movieTitle}". Action required in Review Moderation.`,
+        userId: staff.id,
+        read: false,
+        createdAt: new Date().toISOString(),
+        link: `/manage/movies`,
+        status: 'sent',
+      });
+    }
+  });
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('cinebook:notifications_updated'));
   }
 }
 
-export function deleteReview(reviewId: string): void {
-  const reviews = getReviews().filter(r => r.id !== reviewId);
-  write(KEYS.reviews, reviews);
+export function updateReviewStatus(
+  reviewId: string,
+  status: 'approved' | 'rejected' | 'pending',
+  moderator?: User | null
+): void {
+  const reviews = getReviews();
+  const idx = reviews.findIndex(r => r.id === reviewId);
+  if (idx >= 0) {
+    const prevStatus = reviews[idx].status;
+    reviews[idx].status = status;
+    write(KEYS.reviews, reviews);
+
+    if (prevStatus !== status && (status === 'approved' || status === 'rejected')) {
+      const review = reviews[idx];
+      const movie = getMovie(review.movieId);
+      const movieTitle = movie ? movie.title : 'Movie';
+      const mod = moderator || getCurrentUser();
+      const modName = mod ? mod.name : 'Cinema Staff';
+      const isApproved = status === 'approved';
+
+      // 1. Notify the customer (author of the review)
+      if (review.userId && !review.userId.startsWith('guest_')) {
+        saveNotification({
+          id: `n_rev_mod_${Date.now()}_${review.userId}`,
+          type: isApproved ? 'review_approved' : 'review_rejected',
+          title: isApproved ? 'Review Approved! 🎉' : 'Review Status Update',
+          message: isApproved
+            ? `Your ${review.rating}★ review for "${movieTitle}" was approved by ${modName} and is now published!`
+            : `Your review for "${movieTitle}" was reviewed by ${modName} and was not approved for publication.`,
+          userId: review.userId,
+          read: false,
+          createdAt: new Date().toISOString(),
+          link: `/movies/${review.movieId}`,
+          status: 'sent',
+        });
+      }
+
+      // 2. Notify other staff (Admins and Cinema Managers) for audit log
+      const otherStaff = getUsers().filter(u =>
+        (u.role === 'admin' || u.role === 'cinemaManager') && (!mod || u.id !== mod.id)
+      );
+      otherStaff.forEach(staff => {
+        saveNotification({
+          id: `n_staff_audit_${Date.now()}_${staff.id}`,
+          type: isApproved ? 'review_approved' : 'review_rejected',
+          title: isApproved ? 'Review Published' : 'Review Rejected',
+          message: `${modName} marked review by ${review.userName} for "${movieTitle}" as ${status.toUpperCase()}.`,
+          userId: staff.id,
+          read: false,
+          createdAt: new Date().toISOString(),
+          link: `/manage/movies`,
+          status: 'sent',
+        });
+      });
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('cinebook:notifications_updated'));
+      }
+    }
+  }
+}
+
+export function deleteReview(reviewId: string, moderator?: User | null): void {
+  const reviews = getReviews();
+  const target = reviews.find(r => r.id === reviewId);
+  write(KEYS.reviews, reviews.filter(r => r.id !== reviewId));
+
+  if (target) {
+    const movie = getMovie(target.movieId);
+    const movieTitle = movie ? movie.title : 'Movie';
+    const mod = moderator || getCurrentUser();
+    const modName = mod ? mod.name : 'Cinema Staff';
+
+    // 1. Notify author
+    if (target.userId && !target.userId.startsWith('guest_')) {
+      saveNotification({
+        id: `n_rev_del_${Date.now()}_${target.userId}`,
+        type: 'review_rejected',
+        title: 'Review Removed',
+        message: `Your review for "${movieTitle}" was removed from CineBook by ${modName}.`,
+        userId: target.userId,
+        read: false,
+        createdAt: new Date().toISOString(),
+        link: `/movies/${target.movieId}`,
+        status: 'sent',
+      });
+    }
+
+    // 2. Notify other staff
+    const otherStaff = getUsers().filter(u =>
+      (u.role === 'admin' || u.role === 'cinemaManager') && (!mod || u.id !== mod.id)
+    );
+    otherStaff.forEach(staff => {
+      saveNotification({
+        id: `n_staff_del_${Date.now()}_${staff.id}`,
+        type: 'content_update',
+        title: 'Review Deleted',
+        message: `${modName} deleted a review for "${movieTitle}" (author: ${target.userName}).`,
+        userId: staff.id,
+        read: false,
+        createdAt: new Date().toISOString(),
+        link: `/manage/movies`,
+        status: 'sent',
+      });
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('cinebook:notifications_updated'));
+    }
+  }
 }
 
 // Promotions & Discounts

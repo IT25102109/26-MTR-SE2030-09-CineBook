@@ -123,19 +123,19 @@ export function MovieDetailsPage() {
   };
 
   const handleApproveReview = (reviewId: string) => {
-    updateReviewStatus(reviewId, 'approved');
+    updateReviewStatus(reviewId, 'approved', user);
     setReviewTick(t => t + 1);
     toast('success', 'Review approved and published to public catalog!');
   };
 
   const handleRejectReview = (reviewId: string) => {
-    updateReviewStatus(reviewId, 'rejected');
+    updateReviewStatus(reviewId, 'rejected', user);
     setReviewTick(t => t + 1);
     toast('error', 'Review rejected.');
   };
 
   const handleDeleteReview = (reviewId: string) => {
-    deleteReview(reviewId);
+    deleteReview(reviewId, user);
     setReviewTick(t => t + 1);
     toast('success', 'Review deleted.');
   };

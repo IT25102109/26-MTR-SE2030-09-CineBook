@@ -22,6 +22,9 @@ const typeLabels: Record<string, string> = {
   scheduling_conflict: 'Conflict',
   revenue_milestone: 'Revenue',
   user_registration: 'User',
+  review_pending: 'Review Pending',
+  review_approved: 'Review Approved',
+  review_rejected: 'Review Rejected',
 };
 
 function timeAgo(iso: string): string {

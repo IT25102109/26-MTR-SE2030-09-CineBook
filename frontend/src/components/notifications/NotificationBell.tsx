@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Bell, CheckCheck, Trash2, BellOff } from 'lucide-react';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { NotificationIcon } from '@/components/notifications/NotificationIcon';
@@ -17,6 +17,7 @@ function timeAgo(iso: string): string {
 }
 
 export function NotificationBell() {
+  const navigate = useNavigate();
   const { notifications, unreadCount, hasUnread, bellPulse, markRead, markAllRead, removeNotification } = useNotifications();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -36,6 +37,9 @@ export function NotificationBell() {
   const handleItemClick = (n: Notification) => {
     if (!n.read) markRead(n.id);
     setOpen(false);
+    if (n.link) {
+      navigate(n.link);
+    }
   };
 
   return (

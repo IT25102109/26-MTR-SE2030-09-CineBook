@@ -671,7 +671,7 @@ export function ManageShowtimesPage() {
                         <Button
                           size="sm"
                           onClick={() => {
-                            updateReviewStatus(r.id, 'approved');
+                            updateReviewStatus(r.id, 'approved', user);
                             setTick(t => t + 1);
                             toast('success', `Approved review by ${r.userName}`);
                           }}
@@ -685,7 +685,7 @@ export function ManageShowtimesPage() {
                           size="sm"
                           variant="ghost"
                           onClick={() => {
-                            updateReviewStatus(r.id, 'rejected');
+                            updateReviewStatus(r.id, 'rejected', user);
                             setTick(t => t + 1);
                             toast('error', `Rejected review by ${r.userName}`);
                           }}
@@ -698,7 +698,7 @@ export function ManageShowtimesPage() {
                         size="sm"
                         variant="ghost"
                         onClick={() => {
-                          deleteReview(r.id);
+                          deleteReview(r.id, user);
                           setTick(t => t + 1);
                           toast('success', 'Review deleted');
                         }}

@@ -102,7 +102,10 @@ export type NotificationType =
   | 'new_booking'
   | 'scheduling_conflict'
   | 'revenue_milestone'
-  | 'user_registration';
+  | 'user_registration'
+  | 'review_pending'
+  | 'review_approved'
+  | 'review_rejected';
 
 export type NotificationAudience = 'all' | 'role' | 'branch' | 'loyaltyTier';
 

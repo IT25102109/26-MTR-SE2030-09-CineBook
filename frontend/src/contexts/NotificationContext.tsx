@@ -38,13 +38,25 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       setNotifications(getUserNotifications(user.id));
       setPreferences(getNotificationPreferences(user.id));
     } else {
-      setNotifications([]);
+      const guestNotifs = getUserNotifications('');
+      setNotifications(guestNotifs);
       setPreferences(null);
     }
   }, [user]);
 
   useEffect(() => {
     refresh();
+    const handleSync = () => {
+      refresh();
+      setBellPulse(true);
+      setTimeout(() => setBellPulse(false), 3000);
+    };
+    window.addEventListener('cinebook:notifications_updated', handleSync);
+    window.addEventListener('storage', handleSync);
+    return () => {
+      window.removeEventListener('cinebook:notifications_updated', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
   }, [refresh]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
