@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Plus, Search, Edit2, Trash2, Film, MessageSquare, CheckCircle, XCircle, Star } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Film, MessageSquare, CheckCircle, XCircle, Star, X, Play } from 'lucide-react';
 import { getMovies, saveMovie, deleteMovie, getAllReviewsForModeration, updateReviewStatus, deleteReview, STORE_EVENTS } from '@/data/store';
 import { useStoreSync } from '@/hooks/useStoreSync';
 import { movieApi } from '@/api/movieApi';
@@ -11,6 +11,27 @@ import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { Input, Select, Textarea } from '@/components/ui/Input';
 import type { Movie, MovieReview } from '@/types';
+
+export const AVAILABLE_GENRES = [
+  'Action',
+  'Adventure',
+  'Animation',
+  'Comedy',
+  'Crime',
+  'Documentary',
+  'Drama',
+  'Family',
+  'Fantasy',
+  'History',
+  'Horror',
+  'Music',
+  'Mystery',
+  'Romance',
+  'Sci-Fi',
+  'Thriller',
+  'War',
+  'Western',
+];
 
 const emptyMovie: Omit<Movie, 'id'> = {
   title: '',
@@ -27,7 +48,7 @@ const emptyMovie: Omit<Movie, 'id'> = {
   releaseDate: new Date().toISOString().split('T')[0],
   status: 'now-showing',
   featured: false,
-  trailerUrl: '#',
+  trailerUrl: '',
 };
 
 export function ManageMoviesPage() {
@@ -40,10 +61,12 @@ export function ManageMoviesPage() {
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [genreFilter, setGenreFilter] = useState('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Movie | null>(null);
   const [formData, setFormData] = useState<Omit<Movie, 'id'>>({ ...emptyMovie });
-  const [genreInput, setGenreInput] = useState('');
+  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+  const [customGenreInput, setCustomGenreInput] = useState('');
   const [castInput, setCastInput] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Movie | null>(null);
 
@@ -86,22 +109,25 @@ export function ManageMoviesPage() {
 
   const filtered = movies.filter(m => {
     if (statusFilter !== 'all' && m.status !== statusFilter) return false;
+    if (genreFilter !== 'all' && !m.genre?.includes(genreFilter)) return false;
     if (search && !m.title.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
   const openCreate = () => {
     setEditing(null);
-    setFormData({ ...emptyMovie });
-    setGenreInput('');
+    setFormData({ ...emptyMovie, trailerUrl: '' });
+    setSelectedGenres(['Action']);
+    setCustomGenreInput('');
     setCastInput('');
     setModalOpen(true);
   };
 
   const openEdit = (movie: Movie) => {
     setEditing(movie);
-    setFormData({ ...movie });
-    setGenreInput(movie.genre.join(', '));
+    setFormData({ ...movie, trailerUrl: movie.trailerUrl || '' });
+    setSelectedGenres(movie.genre && movie.genre.length > 0 ? [...movie.genre] : ['Action']);
+    setCustomGenreInput('');
     setCastInput(movie.cast.join(', '));
     setModalOpen(true);
   };
@@ -115,14 +141,18 @@ export function ManageMoviesPage() {
       toast('error', 'Poster URL is required');
       return;
     }
+    if (selectedGenres.length === 0) {
+      toast('error', 'Please select at least one genre from the dropdown');
+      return;
+    }
 
-    const genres = genreInput.split(',').map(g => g.trim()).filter(Boolean);
     const cast = castInput.split(',').map(c => c.trim()).filter(Boolean);
 
     const movieToSave: Movie = {
       ...formData,
-      genre: genres,
+      genre: selectedGenres,
       cast,
+      trailerUrl: (formData.trailerUrl || '').trim(),
       id: editing?.id || '',
     };
 
@@ -179,7 +209,7 @@ export function ManageMoviesPage() {
       </div>
 
       <Card className="p-4 mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
             <input
@@ -194,6 +224,12 @@ export function ManageMoviesPage() {
             <option value="all">All Status ({movies.length})</option>
             <option value="now-showing">Now Showing</option>
             <option value="coming-soon">Coming Soon</option>
+          </Select>
+          <Select value={genreFilter} onChange={e => setGenreFilter(e.target.value)}>
+            <option value="all">All Genres</option>
+            {AVAILABLE_GENRES.map(g => (
+              <option key={g} value={g}>{g}</option>
+            ))}
           </Select>
         </div>
       </Card>
@@ -226,19 +262,32 @@ export function ManageMoviesPage() {
                       {movie.featured && <Badge variant="amber" className="text-[11px]">Featured</Badge>}
                     </div>
                     <p className="text-xs text-text-muted truncate">{movie.genre.join(', ')}</p>
-                    <p className="text-xs text-text-muted mt-0.5">{movie.duration}m • ★ {movie.rating}/10</p>
+                    <div className="flex items-center justify-between text-xs text-text-muted mt-0.5">
+                      <span>{movie.duration}m • ★ {movie.rating}/10</span>
+                      {movie.trailerUrl && movie.trailerUrl !== '#' && (
+                        <a
+                          href={movie.trailerUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] text-accent-primary hover:underline"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <Play className="w-3 h-3 fill-current" /> Trailer
+                        </a>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex gap-3 mt-3 pt-2 border-t border-white/5">
                     <button
                       onClick={() => openEdit(movie)}
-                      className="flex items-center gap-1 text-xs text-text-secondary hover:text-accent-primary transition-colors"
+                      className="flex items-center gap-1 text-xs text-text-secondary hover:text-accent-primary transition-colors cursor-pointer"
                     >
                       <Edit2 className="w-3.5 h-3.5" /> Edit
                     </button>
                     <button
                       onClick={() => setDeleteTarget(movie)}
-                      className="flex items-center gap-1 text-xs text-text-secondary hover:text-accent-destructive transition-colors"
+                      className="flex items-center gap-1 text-xs text-text-secondary hover:text-accent-destructive transition-colors cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" /> Delete
                     </button>
@@ -281,7 +330,122 @@ export function ManageMoviesPage() {
             <Input label="Poster URL" value={formData.poster} onChange={e => setFormData({ ...formData, poster: e.target.value })} placeholder="https://..." />
             <Input label="Backdrop URL" value={formData.backdrop} onChange={e => setFormData({ ...formData, backdrop: e.target.value })} placeholder="https://..." />
           </div>
-          <Input label="Genres (comma-separated)" value={genreInput} onChange={e => setGenreInput(e.target.value)} placeholder="Sci-Fi, Drama, Action" />
+
+          {/* Trailer URL Field */}
+          <div className="space-y-1">
+            <Input
+              label="Trailer URL (YouTube / Vimeo / MP4)"
+              value={formData.trailerUrl || ''}
+              onChange={e => setFormData({ ...formData, trailerUrl: e.target.value })}
+              placeholder="e.g. https://www.youtube.com/watch?v=... or https://youtu.be/..."
+            />
+            {formData.trailerUrl && (
+              <p className="text-[11px] text-text-muted flex items-center gap-1 pl-1">
+                <Play className="w-3 h-3 text-accent-primary fill-current" />
+                Will be embedded as playable video on Movie Details page & hero banners
+              </p>
+            )}
+          </div>
+
+          {/* Genre Dropdown & Chips */}
+          <div className="space-y-2 bg-cinema-base/40 p-3 rounded-xl border border-white/5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-text-primary">
+                Genres ({selectedGenres.length} selected) <span className="text-accent-destructive">*</span>
+              </label>
+              {selectedGenres.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedGenres([])}
+                  className="text-[11px] text-text-muted hover:text-accent-destructive transition-colors cursor-pointer"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <Select
+                value=""
+                onChange={e => {
+                  const val = e.target.value;
+                  if (val && !selectedGenres.includes(val)) {
+                    setSelectedGenres(prev => [...prev, val]);
+                  }
+                }}
+              >
+                <option value="">-- Choose Genre from Dropdown --</option>
+                {AVAILABLE_GENRES.map(g => (
+                  <option key={g} value={g} disabled={selectedGenres.includes(g)}>
+                    {g} {selectedGenres.includes(g) ? '✓ (Added)' : ''}
+                  </option>
+                ))}
+              </Select>
+
+              {/* Custom Genre Adder */}
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  placeholder="Or custom genre..."
+                  value={customGenreInput}
+                  onChange={e => setCustomGenreInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const clean = customGenreInput.trim();
+                      if (clean && !selectedGenres.includes(clean)) {
+                        setSelectedGenres(prev => [...prev, clean]);
+                        setCustomGenreInput('');
+                      }
+                    }
+                  }}
+                  className="flex-1 bg-cinema-elevated border border-white/10 rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-accent-primary/50"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const clean = customGenreInput.trim();
+                    if (clean && !selectedGenres.includes(clean)) {
+                      setSelectedGenres(prev => [...prev, clean]);
+                      setCustomGenreInput('');
+                    }
+                  }}
+                  className="text-xs px-2.5"
+                >
+                  + Add
+                </Button>
+              </div>
+            </div>
+
+            {/* Selected Genre Badges */}
+            <div className="flex flex-wrap gap-1.5 min-h-[36px] p-2 rounded-xl bg-cinema-base/60 border border-white/10 items-center">
+              {selectedGenres.length === 0 ? (
+                <span className="text-xs text-text-muted italic">
+                  No genres added yet. Select from the dropdown above.
+                </span>
+              ) : (
+                selectedGenres.map(g => (
+                  <span
+                    key={g}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-accent-primary/15 text-accent-primary border border-accent-primary/30"
+                  >
+                    {g}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedGenres(selectedGenres.filter(item => item !== g))}
+                      className="hover:text-red-400 p-0.5 rounded transition-colors cursor-pointer"
+                      title={`Remove ${g}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))
+              )}
+            </div>
+          </div>
+
           <Input label="Cast (comma-separated)" value={castInput} onChange={e => setCastInput(e.target.value)} placeholder="Actor 1, Actor 2" />
           <div className="grid grid-cols-2 gap-4">
             <Input label="Director" value={formData.director} onChange={e => setFormData({ ...formData, director: e.target.value })} placeholder="Director name" />

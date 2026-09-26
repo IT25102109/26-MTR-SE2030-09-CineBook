@@ -39,3 +39,4 @@ export function useStoreSync(eventNames?: string | string[]): number {
 
   return tick;
 }
+
