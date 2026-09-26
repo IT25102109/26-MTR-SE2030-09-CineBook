@@ -44,6 +44,7 @@ public class BookingService {
     }
 
     public Booking createBooking(Booking booking) {
+        booking.setId(null);
         // Persist booking record
         Booking saved = bookingRepository.save(booking);
 

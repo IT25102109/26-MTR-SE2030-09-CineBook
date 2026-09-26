@@ -44,10 +44,12 @@ public class CinemaService {
     }
 
     public Cinema createCinema(Cinema cinema) {
+        cinema.setId(null);
         populateLocationIfMissing(cinema);
         if (cinema.getHalls() != null) {
             cinema.setTotalHalls(cinema.getHalls().size());
             for (CinemaHall hall : cinema.getHalls()) {
+                hall.setId(null);
                 hall.setCinema(cinema);
             }
         } else {

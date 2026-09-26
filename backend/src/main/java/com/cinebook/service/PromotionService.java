@@ -34,6 +34,7 @@ public class PromotionService {
     }
 
     public Promotion createPromotion(Promotion promotion) {
+        promotion.setId(null);
         return promotionRepository.save(promotion);
     }
 

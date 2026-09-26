@@ -41,6 +41,9 @@ export const userApi = {
       role: user.role === 'admin' ? 'ADMIN' : user.role === 'cinemaManager' ? 'CINEMA_MANAGER' : 'CUSTOMER',
       branchId: user.assignedBranchId ? Number(user.assignedBranchId) : null,
       password: 'password123',
+      loyaltyPoints: user.loyaltyPoints ?? 0,
+      membershipTier: user.loyaltyTier ?? 'Bronze',
+      avatarColor: user.avatarColor ?? '#F5C518',
     };
     const data = await apiClient<any>('/users', {
       method: 'POST',
@@ -51,14 +54,17 @@ export const userApi = {
 
   async updateUser(id: string, user: Partial<User>): Promise<User> {
     const payload: any = {};
-    if (user.name) payload.fullName = user.name;
-    if (user.email) payload.email = user.email;
-    if (user.role) {
+    if (user.name !== undefined) payload.fullName = user.name;
+    if (user.email !== undefined) payload.email = user.email;
+    if (user.role !== undefined) {
       payload.role = user.role === 'admin' ? 'ADMIN' : user.role === 'cinemaManager' ? 'CINEMA_MANAGER' : 'CUSTOMER';
     }
     if (user.assignedBranchId !== undefined) {
       payload.branchId = user.assignedBranchId ? Number(user.assignedBranchId) : null;
     }
+    if (user.loyaltyPoints !== undefined) payload.loyaltyPoints = user.loyaltyPoints;
+    if (user.loyaltyTier !== undefined) payload.membershipTier = user.loyaltyTier;
+    if (user.avatarColor !== undefined) payload.avatarColor = user.avatarColor;
     const data = await apiClient<any>(`/users/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),

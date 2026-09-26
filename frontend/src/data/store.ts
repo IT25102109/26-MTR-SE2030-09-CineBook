@@ -6,6 +6,11 @@ import { showtimeApi } from '@/api/showtimeApi';
 import { bookingApi } from '@/api/bookingApi';
 import { promotionApi } from '@/api/promotionApi';
 import { userApi } from '@/api/userApi';
+import { reviewApi } from '@/api/reviewApi';
+import { notificationApi } from '@/api/notificationApi';
+import { wishlistApi } from '@/api/wishlistApi';
+import { loyaltyVoucherApi } from '@/api/loyaltyVoucherApi';
+import { waitlistApi } from '@/api/waitlistApi';
 
 const KEYS = {
   movies: 'cinebook_movies',
@@ -79,13 +84,15 @@ export function seedData(): void {
 
 export async function syncFromBackend(): Promise<void> {
   try {
-    const [moviesResult, branchesResult, showtimesResult, bookingsResult, promosResult, usersResult] = await Promise.allSettled([
+    const [moviesResult, branchesResult, showtimesResult, bookingsResult, promosResult, usersResult, reviewsResult, notifsResult] = await Promise.allSettled([
       movieApi.getMovies(),
       branchApi.getBranches(),
       showtimeApi.getShowtimes(),
       bookingApi.getBookings(),
       promotionApi.getPromotions(),
       userApi.getUsers(),
+      reviewApi.getReviews(),
+      notificationApi.getNotifications(),
     ]);
 
     if (moviesResult.status === 'fulfilled' && moviesResult.value && moviesResult.value.length > 0) {
@@ -105,6 +112,31 @@ export async function syncFromBackend(): Promise<void> {
     }
     if (usersResult.status === 'fulfilled' && usersResult.value && usersResult.value.length > 0) {
       write(KEYS.users, usersResult.value);
+    }
+    if (reviewsResult.status === 'fulfilled' && reviewsResult.value && reviewsResult.value.length > 0) {
+      write(KEYS.reviews, reviewsResult.value);
+    }
+    if (notifsResult.status === 'fulfilled' && notifsResult.value && notifsResult.value.length > 0) {
+      write(KEYS.notifications, notifsResult.value);
+    }
+
+    const currentUser = getCurrentUser();
+    if (currentUser?.id) {
+      wishlistApi.getWishlist(currentUser.id).then(items => {
+        if (items && items.length > 0) {
+          const all = JSON.parse(localStorage.getItem(KEYS.wishlist) || '{}');
+          all[currentUser.id] = items;
+          localStorage.setItem(KEYS.wishlist, JSON.stringify(all));
+        }
+      }).catch(err => console.warn('Wishlist sync failed:', err));
+
+      loyaltyVoucherApi.getUserVouchers(currentUser.id).then(vouchers => {
+        if (vouchers && vouchers.length > 0) {
+          const allV = read<LoyaltyVoucher>(KEYS.vouchers);
+          const others = allV.filter(v => v.userId !== currentUser.id);
+          write(KEYS.vouchers, [...vouchers, ...others]);
+        }
+      }).catch(err => console.warn('Vouchers sync failed:', err));
     }
   } catch (err) {
     console.warn('Backend sync failed, using local store data:', err);
@@ -480,6 +512,21 @@ export function redeemLoyaltyReward(userId: string, title: string, pointsCost: n
   const allVouchers = read<LoyaltyVoucher>(KEYS.vouchers);
   allVouchers.unshift(voucher);
   write(KEYS.vouchers, allVouchers);
+  loyaltyVoucherApi.redeemVoucher({
+    userId,
+    code: voucherCode,
+    title,
+    pointsCost,
+    redeemedAt: voucher.redeemedAt,
+    expiresAt,
+  }).then(saved => {
+    if (saved && saved.id && saved.id !== voucher.id) {
+      const cur = read<LoyaltyVoucher>(KEYS.vouchers);
+      const it = cur.find(v => v.id === voucher.id);
+      if (it) it.id = saved.id;
+      write(KEYS.vouchers, cur);
+    }
+  }).catch(err => console.warn('API redeemVoucher failed:', err));
 
   return { success: true, voucher, message: `Redeemed ${title}! Voucher Code: ${voucherCode}` };
 }
@@ -598,7 +645,17 @@ export function saveNotification(notification: Notification): void {
   if (existingIdx >= 0) {
     notifications[existingIdx] = notification;
   } else {
-    notifications.unshift(notification);
+    const localId = notification.id || `n${Date.now()}`;
+    const toSave = { ...notification, id: localId };
+    notifications.unshift(toSave);
+    notificationApi.createNotification(notification).then(created => {
+      if (created.id && created.id !== localId) {
+        const cur = getNotifications();
+        const it = cur.find(n => n.id === localId);
+        if (it) it.id = created.id;
+        write(KEYS.notifications, cur);
+      }
+    }).catch(err => console.warn('API createNotification failed:', err));
   }
   write(KEYS.notifications, notifications);
   if (typeof window !== 'undefined') {
@@ -613,6 +670,7 @@ export function markNotificationRead(id: string): void {
     notifications[idx].read = true;
     if (notifications[idx].status === 'sent') notifications[idx].status = 'read';
     write(KEYS.notifications, notifications);
+    notificationApi.markAsRead(id).catch(err => console.warn('API markAsRead failed:', err));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('cinebook:notifications_updated'));
     }
@@ -628,6 +686,7 @@ export function markAllNotificationsRead(userId: string): void {
     }
   });
   write(KEYS.notifications, notifications);
+  notificationApi.markAllAsRead(userId).catch(err => console.warn('API markAllAsRead failed:', err));
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('cinebook:notifications_updated'));
   }
@@ -635,6 +694,7 @@ export function markAllNotificationsRead(userId: string): void {
 
 export function deleteNotification(id: string): void {
   write(KEYS.notifications, getNotifications().filter(n => n.id !== id));
+  notificationApi.deleteNotification(id).catch(err => console.warn('API deleteNotification failed:', err));
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('cinebook:notifications_updated'));
   }
@@ -730,8 +790,19 @@ export function saveReview(review: MovieReview): void {
   const idx = reviews.findIndex(r => r.id === review.id);
   if (idx >= 0) {
     reviews[idx] = review;
+    reviewApi.updateReviewStatus(review.id, review.status).catch(err => console.warn('API updateReview failed:', err));
   } else {
-    reviews.unshift(review);
+    const localId = review.id || `rev_${Date.now()}`;
+    const toSave = { ...review, id: localId };
+    reviews.unshift(toSave);
+    reviewApi.createReview(review).then(created => {
+      if (created.id && created.id !== localId) {
+        const cur = getReviews();
+        const it = cur.find(r => r.id === localId);
+        if (it) it.id = created.id;
+        write(KEYS.reviews, cur);
+      }
+    }).catch(err => console.warn('API createReview failed:', err));
   }
   write(KEYS.reviews, reviews);
 
@@ -788,6 +859,7 @@ export function updateReviewStatus(
     const prevStatus = reviews[idx].status;
     reviews[idx].status = status;
     write(KEYS.reviews, reviews);
+    reviewApi.updateReviewStatus(reviewId, status).catch(err => console.warn('API updateReviewStatus failed:', err));
 
     if (prevStatus !== status && (status === 'approved' || status === 'rejected')) {
       const review = reviews[idx];
@@ -843,6 +915,7 @@ export function deleteReview(reviewId: string, moderator?: User | null): void {
   const reviews = getReviews();
   const target = reviews.find(r => r.id === reviewId);
   write(KEYS.reviews, reviews.filter(r => r.id !== reviewId));
+  reviewApi.deleteReview(reviewId).catch(err => console.warn('API deleteReview failed:', err));
 
   if (target) {
     const movie = getMovie(target.movieId);
@@ -970,6 +1043,7 @@ export function toggleWishlist(userId: string, movieId: string): boolean {
     }
     all[userId] = list;
     localStorage.setItem(KEYS.wishlist, JSON.stringify(all));
+    wishlistApi.toggleWishlist(userId, movieId).catch(err => console.warn('API toggleWishlist failed:', err));
     return wishlisted;
   } catch {
     return false;
@@ -1065,16 +1139,32 @@ export function joinWaitlist(showtimeId: string, user: { id: string; name: strin
     const all = JSON.parse(localStorage.getItem(KEYS.waitlists) || '{}');
     const list: WaitlistEntry[] = all[showtimeId] || [];
     if (list.some(e => e.userId === user.id)) return false;
-    list.push({
+    const newEntry: WaitlistEntry = {
       id: `wl_${Date.now()}`,
       showtimeId,
       userId: user.id,
       userName: user.name,
       userEmail: user.email,
       createdAt: new Date().toISOString(),
-    });
+    };
+    list.push(newEntry);
     all[showtimeId] = list;
     localStorage.setItem(KEYS.waitlists, JSON.stringify(all));
+    waitlistApi.joinWaitlist({
+      showtimeId,
+      userId: user.id,
+      userName: user.name,
+      userEmail: user.email,
+    }).then(saved => {
+      if (saved && saved.id && saved.id !== newEntry.id) {
+        const curAll = JSON.parse(localStorage.getItem(KEYS.waitlists) || '{}');
+        const curList: WaitlistEntry[] = curAll[showtimeId] || [];
+        const it = curList.find(e => e.id === newEntry.id);
+        if (it) it.id = saved.id;
+        curAll[showtimeId] = curList;
+        localStorage.setItem(KEYS.waitlists, JSON.stringify(curAll));
+      }
+    }).catch(err => console.warn('API joinWaitlist failed:', err));
     return true;
   } catch {
     return false;

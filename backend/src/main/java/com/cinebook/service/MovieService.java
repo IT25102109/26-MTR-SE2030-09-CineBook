@@ -31,7 +31,7 @@ public class MovieService {
     }
 
     public Movie createMovie(Movie movie) {
-        // TODO: add validation, and restrict this to CINEMA_MANAGER/ADMIN roles once security is wired up
+        movie.setId(null);
         return movieRepository.save(movie);
     }
 

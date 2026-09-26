@@ -27,15 +27,32 @@ public class UserService {
     }
 
     public User createUser(User user) {
+        user.setId(null);
+        if (user.getPassword() == null || user.getPassword().isBlank()) {
+            user.setPassword("password123");
+        }
+        if (user.getLoyaltyPoints() == null) {
+            user.setLoyaltyPoints(0);
+        }
+        if (user.getMembershipTier() == null) {
+            user.setMembershipTier("Bronze");
+        }
+        if (user.getAvatarColor() == null) {
+            user.setAvatarColor("#F5C518");
+        }
         return userRepository.save(user);
     }
 
     public User updateUser(Long id, User userDetails) {
         User user = getUserById(id);
-        user.setFullName(userDetails.getFullName());
-        user.setEmail(userDetails.getEmail());
-        user.setRole(userDetails.getRole());
-        user.setBranchId(userDetails.getBranchId());
+        if (userDetails.getFullName() != null) user.setFullName(userDetails.getFullName());
+        if (userDetails.getEmail() != null) user.setEmail(userDetails.getEmail());
+        if (userDetails.getRole() != null) user.setRole(userDetails.getRole());
+        if (userDetails.getBranchId() != null) user.setBranchId(userDetails.getBranchId());
+        if (userDetails.getLoyaltyPoints() != null) user.setLoyaltyPoints(userDetails.getLoyaltyPoints());
+        if (userDetails.getMembershipTier() != null) user.setMembershipTier(userDetails.getMembershipTier());
+        if (userDetails.getAvatarColor() != null) user.setAvatarColor(userDetails.getAvatarColor());
+        if (userDetails.getPhone() != null) user.setPhone(userDetails.getPhone());
         if (userDetails.getPassword() != null && !userDetails.getPassword().isBlank()) {
             user.setPassword(userDetails.getPassword());
         }

@@ -134,10 +134,12 @@ public class Movie {
     }
 
     @Transient
+    @JsonProperty("cast")
     public List<String> getCast() {
         return castCsv == null || castCsv.isBlank() ? List.of() : List.of(castCsv.split("\\s*,\\s*"));
     }
 
+    @JsonProperty("cast")
     public void setCast(List<String> cast) {
         this.castCsv = cast == null ? null : String.join(",", cast);
     }

@@ -56,7 +56,8 @@ public class ShowtimeService {
                 }
             }
             if (timeStr != null && !timeStr.isBlank()) {
-                int hour = Integer.parseInt(timeStr.split(":")[0]);
+                int totalMins = parseTimeToMinutes(timeStr);
+                int hour = totalMins / 60;
                 if (hour >= 17) {
                     multiplier += 0.15;
                 }
@@ -66,6 +67,7 @@ public class ShowtimeService {
     }
 
     public Showtime createShowtime(Showtime showtime) {
+        showtime.setId(null);
         validateNoSchedulingConflict(showtime, null);
         if (showtime.getBasePrice() > 0 && showtime.getDate() != null && showtime.getTime() != null) {
             double dynamicBase = calculateDynamicPrice(showtime.getBasePrice(), showtime.getDate(), showtime.getTime());
@@ -127,10 +129,22 @@ public class ShowtimeService {
     }
 
     private int parseTimeToMinutes(String timeStr) {
+        if (timeStr == null || timeStr.isBlank()) {
+            return 0;
+        }
         try {
-            String[] parts = timeStr.trim().split(":");
-            int hours = Integer.parseInt(parts[0]);
-            int mins = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
+            String s = timeStr.trim().toUpperCase();
+            boolean isPm = s.contains("PM");
+            boolean isAm = s.contains("AM");
+            s = s.replace("AM", "").replace("PM", "").trim();
+            String[] parts = s.split(":");
+            int hours = Integer.parseInt(parts[0].trim());
+            int mins = parts.length > 1 ? Integer.parseInt(parts[1].trim()) : 0;
+            if (isPm && hours < 12) {
+                hours += 12;
+            } else if (isAm && hours == 12) {
+                hours = 0;
+            }
             return hours * 60 + mins;
         } catch (Exception e) {
             return 0;
