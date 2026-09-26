@@ -1,7 +1,8 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ChevronLeft, Armchair, Info, Timer, Users, Accessibility, AlertTriangle, RefreshCw, Bell, ShieldCheck, CheckCircle2, Lock } from 'lucide-react';
-import { getShowtime, getMovie, getBranch, getHall, updateShowtimeSeats, joinWaitlist, getWaitlist } from '@/data/store';
+import { getShowtime, getMovie, getBranch, getHall, updateShowtimeSeats, joinWaitlist, getWaitlist, STORE_EVENTS } from '@/data/store';
+import { useStoreSync } from '@/hooks/useStoreSync';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -19,7 +20,9 @@ export function SeatSelectionPage() {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const showtime = useMemo(() => showtimeId ? getShowtime(showtimeId) : undefined, [showtimeId]);
+  const storeTick = useStoreSync([STORE_EVENTS.showtimes, STORE_EVENTS.waitlists]);
+
+  const showtime = useMemo(() => showtimeId ? getShowtime(showtimeId) : undefined, [showtimeId, storeTick]);
   const movie = useMemo(() => showtime ? getMovie(showtime.movieId) : undefined, [showtime]);
   const branch = useMemo(() => showtime ? getBranch(showtime.branchId) : undefined, [showtime]);
   const hall = useMemo(() => showtime ? getHall(showtime.branchId, showtime.hallId) : undefined, [showtime]);

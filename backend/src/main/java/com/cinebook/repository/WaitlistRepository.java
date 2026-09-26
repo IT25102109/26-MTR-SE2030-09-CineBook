@@ -13,3 +13,4 @@ public interface WaitlistRepository extends JpaRepository<Waitlist, Long> {
     Optional<Waitlist> findByShowtimeIdAndUserId(Long showtimeId, Long userId);
     List<Waitlist> findByUserId(Long userId);
 }
+

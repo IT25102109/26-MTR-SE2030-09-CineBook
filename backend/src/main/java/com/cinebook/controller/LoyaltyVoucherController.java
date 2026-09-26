@@ -35,3 +35,4 @@ public class LoyaltyVoucherController {
         return loyaltyVoucherService.redeemVoucher(voucher);
     }
 }
+

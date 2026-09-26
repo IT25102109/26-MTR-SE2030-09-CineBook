@@ -27,3 +27,4 @@ export const loyaltyVoucherApi = {
     return normalizeVoucher(data);
   },
 };
+

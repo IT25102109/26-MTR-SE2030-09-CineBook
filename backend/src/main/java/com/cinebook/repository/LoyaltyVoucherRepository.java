@@ -12,3 +12,4 @@ public interface LoyaltyVoucherRepository extends JpaRepository<LoyaltyVoucher, 
     List<LoyaltyVoucher> findByUserIdOrderByRedeemedAtDesc(Long userId);
     Optional<LoyaltyVoucher> findByCode(String code);
 }
+

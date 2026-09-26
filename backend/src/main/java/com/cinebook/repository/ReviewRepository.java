@@ -12,3 +12,4 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     List<Review> findByMovieIdAndModerationStatus(Long movieId, String moderationStatus);
     List<Review> findAllByOrderByReviewDateDesc();
 }
+

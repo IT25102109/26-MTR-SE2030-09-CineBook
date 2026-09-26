@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Star, Clock, Calendar, Film, Play, ChevronLeft, MapPin, X, MessageSquare, ThumbsUp, Send, User, CheckCircle, XCircle, ShieldCheck, Trash2 } from 'lucide-react';
-import { getMovie, getShowtimesByMovie, getBranches, getBranch, getMovieReviews, getMovieAllReviews, saveReview, updateReviewStatus, deleteReview } from '@/data/store';
+import { getMovie, getShowtimesByMovie, getBranches, getBranch, getMovieReviews, getMovieAllReviews, saveReview, updateReviewStatus, deleteReview, STORE_EVENTS } from '@/data/store';
+import { useStoreSync } from '@/hooks/useStoreSync';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
@@ -19,9 +20,16 @@ export function MovieDetailsPage() {
 
   const isManagerOrAdmin = hasRole('admin', 'cinemaManager');
 
-  const movie = useMemo(() => id ? getMovie(id) : undefined, [id]);
-  const showtimes = useMemo(() => id ? getShowtimesByMovie(id) : [], [id]);
-  const branches = useMemo(() => getBranches(), []);
+  const storeTick = useStoreSync([
+    STORE_EVENTS.movies,
+    STORE_EVENTS.showtimes,
+    STORE_EVENTS.branches,
+    STORE_EVENTS.reviews,
+  ]);
+
+  const movie = useMemo(() => id ? getMovie(id) : undefined, [id, storeTick]);
+  const showtimes = useMemo(() => id ? getShowtimesByMovie(id) : [], [id, storeTick]);
+  const branches = useMemo(() => getBranches(), [storeTick]);
 
   const [selectedBranch, setSelectedBranch] = useState<string>(branches[0]?.id || '');
   const [selectedDate, setSelectedDate] = useState<string>('');
@@ -33,7 +41,7 @@ export function MovieDetailsPage() {
   const [authorName, setAuthorName] = useState('');
   const [reviewTick, setReviewTick] = useState(0);
 
-  const allMovieReviews = useMemo(() => id ? getMovieAllReviews(id) : [], [id, reviewTick]);
+  const allMovieReviews = useMemo(() => id ? getMovieAllReviews(id) : [], [id, reviewTick, storeTick]);
   const approvedReviews = useMemo(() => allMovieReviews.filter(r => r.status === 'approved'), [allMovieReviews]);
   const pendingReviews = useMemo(() => allMovieReviews.filter(r => r.status === 'pending'), [allMovieReviews]);
   const rejectedReviews = useMemo(() => allMovieReviews.filter(r => r.status === 'rejected'), [allMovieReviews]);

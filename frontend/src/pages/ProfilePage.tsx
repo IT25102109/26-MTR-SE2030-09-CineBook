@@ -4,7 +4,8 @@ import { Mail, Shield, Film, Ticket, LogOut, ChevronRight, Bell, ToggleLeft, Tog
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useNotifications } from '@/contexts/NotificationContext';
-import { getUserBookings, getUserLoyaltyVouchers, redeemLoyaltyReward, calculateLoyaltyTier } from '@/data/store';
+import { getUserBookings, getUserLoyaltyVouchers, redeemLoyaltyReward, calculateLoyaltyTier, STORE_EVENTS } from '@/data/store';
+import { useStoreSync } from '@/hooks/useStoreSync';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -21,7 +22,9 @@ export function ProfilePage() {
   const { toast } = useToast();
   const { preferences, updatePreferences } = useNotifications();
 
-  const bookings = useMemo(() => user ? getUserBookings(user.id) : [], [user]);
+  const storeTick = useStoreSync([STORE_EVENTS.bookings, STORE_EVENTS.vouchers, STORE_EVENTS.users]);
+
+  const bookings = useMemo(() => user ? getUserBookings(user.id) : [], [user, storeTick]);
   const upcoming = bookings.filter(b => b.status === 'confirmed' && new Date(b.date) >= new Date(new Date().toDateString()));
   const totalSpent = bookings.filter(b => b.status === 'confirmed').reduce((sum, b) => sum + b.totalAmount, 0);
 
@@ -31,7 +34,7 @@ export function ProfilePage() {
 
   const loyaltyPoints = user?.loyaltyPoints ?? 0;
   const currentTier = user?.loyaltyTier || calculateLoyaltyTier(loyaltyPoints);
-  const vouchers = useMemo(() => user ? getUserLoyaltyVouchers(user.id) : [], [user, tick]);
+  const vouchers = useMemo(() => user ? getUserLoyaltyVouchers(user.id) : [], [user, tick, storeTick]);
 
   const tierProgress = useMemo(() => {
     if (currentTier === 'Platinum') {

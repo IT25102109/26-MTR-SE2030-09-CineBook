@@ -30,6 +30,28 @@ const KEYS = {
   vouchers: 'cinebook_loyalty_vouchers',
 };
 
+export const STORE_EVENTS = {
+  movies: 'cinebook:movies_updated',
+  branches: 'cinebook:branches_updated',
+  showtimes: 'cinebook:showtimes_updated',
+  bookings: 'cinebook:bookings_updated',
+  users: 'cinebook:users_updated',
+  reviews: 'cinebook:reviews_updated',
+  promotions: 'cinebook:promotions_updated',
+  wishlist: 'cinebook:wishlist_updated',
+  vouchers: 'cinebook:vouchers_updated',
+  waitlists: 'cinebook:waitlists_updated',
+  notifications: 'cinebook:notifications_updated',
+  all: 'cinebook:data_updated',
+} as const;
+
+export function emitStoreEvent(event: string) {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(event));
+    window.dispatchEvent(new CustomEvent(STORE_EVENTS.all));
+  }
+}
+
 export function seedData(): void {
   // If legacy mock data is detected (e.g. 'm1', 'b1', 'bk1'), clear it so fresh DB data takes precedence
   const existingMoviesRaw = localStorage.getItem(KEYS.movies);
@@ -135,9 +157,11 @@ export async function syncFromBackend(): Promise<void> {
           const allV = read<LoyaltyVoucher>(KEYS.vouchers);
           const others = allV.filter(v => v.userId !== currentUser.id);
           write(KEYS.vouchers, [...vouchers, ...others]);
+          emitStoreEvent(STORE_EVENTS.vouchers);
         }
       }).catch(err => console.warn('Vouchers sync failed:', err));
     }
+    emitStoreEvent(STORE_EVENTS.all);
   } catch (err) {
     console.warn('Backend sync failed, using local store data:', err);
   }
@@ -184,29 +208,34 @@ export function saveMovie(movie: Movie): void {
   const idx = movies.findIndex(m => m.id === movie.id);
   if (idx >= 0) {
     movies[idx] = movie;
+    write(KEYS.movies, movies);
+    emitStoreEvent(STORE_EVENTS.movies);
     movieApi.updateMovie(movie.id, movie).catch(err =>
       console.warn('API updateMovie sync failed, changes kept locally:', err)
     );
   } else {
     const localId = movie.id || `m${Date.now()}`;
     const toSave = { ...movie, id: localId };
-    movies.push(toSave);
+    movies.unshift(toSave);
+    write(KEYS.movies, movies);
+    emitStoreEvent(STORE_EVENTS.movies);
     movieApi.createMovie(movie).then(created => {
       if (created.id && created.id !== localId) {
         const current = getMovies();
         const item = current.find(m => m.id === localId);
         if (item) item.id = created.id;
         write(KEYS.movies, current);
+        emitStoreEvent(STORE_EVENTS.movies);
       }
     }).catch(err =>
       console.warn('API createMovie sync failed, changes kept locally:', err)
     );
   }
-  write(KEYS.movies, movies);
 }
 
 export function deleteMovie(id: string): void {
   write(KEYS.movies, getMovies().filter(m => m.id !== id));
+  emitStoreEvent(STORE_EVENTS.movies);
   movieApi.deleteMovie(id).catch(err =>
     console.warn('API deleteMovie sync failed, deletion kept locally:', err)
   );
@@ -226,6 +255,8 @@ export function saveBranch(branch: Branch): void {
   const idx = branches.findIndex(b => b.id === branch.id);
   if (idx >= 0) {
     branches[idx] = branch;
+    write(KEYS.branches, branches);
+    emitStoreEvent(STORE_EVENTS.branches);
     branchApi.updateBranch(branch.id, branch).catch(err =>
       console.warn('API updateBranch sync failed, changes kept locally:', err)
     );
@@ -233,22 +264,25 @@ export function saveBranch(branch: Branch): void {
     const localId = branch.id || `b${Date.now()}`;
     const toSave = { ...branch, id: localId };
     branches.push(toSave);
+    write(KEYS.branches, branches);
+    emitStoreEvent(STORE_EVENTS.branches);
     branchApi.createBranch(branch).then(created => {
       if (created.id && created.id !== localId) {
         const current = getBranches();
         const item = current.find(b => b.id === localId);
         if (item) item.id = created.id;
         write(KEYS.branches, current);
+        emitStoreEvent(STORE_EVENTS.branches);
       }
     }).catch(err =>
       console.warn('API createBranch sync failed, changes kept locally:', err)
     );
   }
-  write(KEYS.branches, branches);
 }
 
 export function deleteBranch(id: string): void {
   write(KEYS.branches, getBranches().filter(b => b.id !== id));
+  emitStoreEvent(STORE_EVENTS.branches);
   branchApi.deleteBranch(id).catch(err =>
     console.warn('API deleteBranch sync failed, deletion kept locally:', err)
   );
@@ -273,8 +307,10 @@ export async function saveShowtime(showtime: Showtime): Promise<Showtime> {
   if (idx >= 0) {
     showtimes[idx] = showtime;
     write(KEYS.showtimes, showtimes);
+    emitStoreEvent(STORE_EVENTS.showtimes);
     try {
-      return await showtimeApi.updateShowtime(showtime.id, showtime);
+      const res = await showtimeApi.updateShowtime(showtime.id, showtime);
+      return res;
     } catch (err) {
       console.warn('API updateShowtime sync failed, changes kept locally:', err);
       return showtime;
@@ -284,6 +320,7 @@ export async function saveShowtime(showtime: Showtime): Promise<Showtime> {
     const toSave = { ...showtime, id: localId };
     showtimes.push(toSave);
     write(KEYS.showtimes, showtimes);
+    emitStoreEvent(STORE_EVENTS.showtimes);
     try {
       const created = await showtimeApi.createShowtime(showtime);
       if (created.id && created.id !== localId) {
@@ -291,6 +328,7 @@ export async function saveShowtime(showtime: Showtime): Promise<Showtime> {
         const item = current.find(s => s.id === localId);
         if (item) item.id = created.id;
         write(KEYS.showtimes, current);
+        emitStoreEvent(STORE_EVENTS.showtimes);
       }
       return created;
     } catch (err) {
@@ -302,6 +340,7 @@ export async function saveShowtime(showtime: Showtime): Promise<Showtime> {
 
 export async function deleteShowtime(id: string): Promise<void> {
   write(KEYS.showtimes, getShowtimes().filter(s => s.id !== id));
+  emitStoreEvent(STORE_EVENTS.showtimes);
   try {
     await showtimeApi.deleteShowtime(id);
   } catch (err) {
@@ -315,6 +354,7 @@ export async function updateShowtimeSeats(showtimeId: string, seats: string[]): 
   if (idx >= 0) {
     showtimes[idx].bookedSeats = [...showtimes[idx].bookedSeats, ...seats];
     write(KEYS.showtimes, showtimes);
+    emitStoreEvent(STORE_EVENTS.showtimes);
     try {
       await showtimeApi.addBookedSeats(showtimeId, seats);
     } catch (err) {
@@ -330,6 +370,7 @@ export async function releaseShowtimeSeats(showtimeId: string, seats: string[]):
     const seatSet = new Set(seats);
     showtimes[idx].bookedSeats = showtimes[idx].bookedSeats.filter(s => !seatSet.has(s));
     write(KEYS.showtimes, showtimes);
+    emitStoreEvent(STORE_EVENTS.showtimes);
 
     // Auto-dispatch waitlist alert if seats are released
     const waitlist = getWaitlist(showtimeId);
@@ -362,8 +403,9 @@ export function getUserBookings(userId: string): Booking[] {
 
 export function saveBooking(booking: Booking): void {
   const bookings = getBookings();
-  bookings.push(booking);
+  bookings.unshift(booking);
   write(KEYS.bookings, bookings);
+  emitStoreEvent(STORE_EVENTS.bookings);
 
   // Award Customer Loyalty Points (1 point per $1 spent)
   const earnedPoints = Math.round(booking.totalAmount);
@@ -377,6 +419,7 @@ export function saveBooking(booking: Booking): void {
       const item = current.find(b => b.id === booking.id);
       if (item) item.id = created.id;
       write(KEYS.bookings, current);
+      emitStoreEvent(STORE_EVENTS.bookings);
     }
   }).catch(err =>
     console.warn('API createBooking sync failed, kept locally:', err)
@@ -389,6 +432,7 @@ export function updateBooking(id: string, updates: Partial<Booking>): void {
   if (idx >= 0) {
     bookings[idx] = { ...bookings[idx], ...updates };
     write(KEYS.bookings, bookings);
+    emitStoreEvent(STORE_EVENTS.bookings);
     if (updates.status === 'cancelled') {
       bookingApi.cancelBooking(id).catch(err =>
         console.warn('API cancelBooking sync failed, kept locally:', err)
@@ -409,6 +453,7 @@ export function cancelBookingWithRefund(id: string, refundAmount: number): void 
       refundStatus: refundAmount > 0 ? 'processed' : 'none',
       refundAmount: refundAmount,
     });
+    emitStoreEvent(STORE_EVENTS.bookings);
   }
 }
 
@@ -434,6 +479,7 @@ export function rescheduleBooking(
       hallName: newHallName,
       rescheduledFrom: `${target.date} ${target.time}`,
     });
+    emitStoreEvent(STORE_EVENTS.bookings);
   }
 }
 
@@ -512,6 +558,7 @@ export function redeemLoyaltyReward(userId: string, title: string, pointsCost: n
   const allVouchers = read<LoyaltyVoucher>(KEYS.vouchers);
   allVouchers.unshift(voucher);
   write(KEYS.vouchers, allVouchers);
+  emitStoreEvent(STORE_EVENTS.vouchers);
   loyaltyVoucherApi.redeemVoucher({
     userId,
     code: voucherCode,
@@ -525,6 +572,7 @@ export function redeemLoyaltyReward(userId: string, title: string, pointsCost: n
       const it = cur.find(v => v.id === voucher.id);
       if (it) it.id = saved.id;
       write(KEYS.vouchers, cur);
+      emitStoreEvent(STORE_EVENTS.vouchers);
     }
   }).catch(err => console.warn('API redeemVoucher failed:', err));
 
@@ -552,21 +600,33 @@ export function saveUser(user: User): void {
   const idx = users.findIndex(u => u.id === user.id);
   if (idx >= 0) {
     users[idx] = user;
+    write(KEYS.users, users);
+    emitStoreEvent(STORE_EVENTS.users);
     userApi.updateUser(user.id, user).catch(err =>
       console.warn('API updateUser sync failed, changes kept locally:', err)
     );
   } else {
     const localId = user.id || String(Date.now());
     users.push({ ...user, id: localId });
-    userApi.createUser(user).catch(err =>
+    write(KEYS.users, users);
+    emitStoreEvent(STORE_EVENTS.users);
+    userApi.createUser(user).then(created => {
+      if (created.id && created.id !== localId) {
+        const current = getUsers();
+        const item = current.find(u => u.id === localId);
+        if (item) item.id = created.id;
+        write(KEYS.users, current);
+        emitStoreEvent(STORE_EVENTS.users);
+      }
+    }).catch(err =>
       console.warn('API createUser sync failed, changes kept locally:', err)
     );
   }
-  write(KEYS.users, users);
 }
 
 export function deleteUser(id: string): void {
   write(KEYS.users, getUsers().filter(u => u.id !== id));
+  emitStoreEvent(STORE_EVENTS.users);
   userApi.deleteUser(id).catch(err =>
     console.warn('API deleteUser sync failed, deletion kept locally:', err)
   );
@@ -658,9 +718,7 @@ export function saveNotification(notification: Notification): void {
     }).catch(err => console.warn('API createNotification failed:', err));
   }
   write(KEYS.notifications, notifications);
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('cinebook:notifications_updated'));
-  }
+  emitStoreEvent(STORE_EVENTS.notifications);
 }
 
 export function markNotificationRead(id: string): void {
@@ -671,9 +729,7 @@ export function markNotificationRead(id: string): void {
     if (notifications[idx].status === 'sent') notifications[idx].status = 'read';
     write(KEYS.notifications, notifications);
     notificationApi.markAsRead(id).catch(err => console.warn('API markAsRead failed:', err));
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('cinebook:notifications_updated'));
-    }
+    emitStoreEvent(STORE_EVENTS.notifications);
   }
 }
 
@@ -687,17 +743,13 @@ export function markAllNotificationsRead(userId: string): void {
   });
   write(KEYS.notifications, notifications);
   notificationApi.markAllAsRead(userId).catch(err => console.warn('API markAllAsRead failed:', err));
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('cinebook:notifications_updated'));
-  }
+  emitStoreEvent(STORE_EVENTS.notifications);
 }
 
 export function deleteNotification(id: string): void {
   write(KEYS.notifications, getNotifications().filter(n => n.id !== id));
   notificationApi.deleteNotification(id).catch(err => console.warn('API deleteNotification failed:', err));
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('cinebook:notifications_updated'));
-  }
+  emitStoreEvent(STORE_EVENTS.notifications);
 }
 
 export function broadcastNotification(
@@ -717,9 +769,7 @@ export function broadcastNotification(
     });
   });
   write(KEYS.notifications, notifications);
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('cinebook:notifications_updated'));
-  }
+  emitStoreEvent(STORE_EVENTS.notifications);
 }
 
 // Notification Templates
@@ -790,21 +840,25 @@ export function saveReview(review: MovieReview): void {
   const idx = reviews.findIndex(r => r.id === review.id);
   if (idx >= 0) {
     reviews[idx] = review;
+    write(KEYS.reviews, reviews);
+    emitStoreEvent(STORE_EVENTS.reviews);
     reviewApi.updateReviewStatus(review.id, review.status).catch(err => console.warn('API updateReview failed:', err));
   } else {
     const localId = review.id || `rev_${Date.now()}`;
     const toSave = { ...review, id: localId };
     reviews.unshift(toSave);
+    write(KEYS.reviews, reviews);
+    emitStoreEvent(STORE_EVENTS.reviews);
     reviewApi.createReview(review).then(created => {
       if (created.id && created.id !== localId) {
         const cur = getReviews();
         const it = cur.find(r => r.id === localId);
         if (it) it.id = created.id;
         write(KEYS.reviews, cur);
+        emitStoreEvent(STORE_EVENTS.reviews);
       }
     }).catch(err => console.warn('API createReview failed:', err));
   }
-  write(KEYS.reviews, reviews);
 
   // Notify all roles upon review submission
   const movie = getMovie(review.movieId);
@@ -859,6 +913,7 @@ export function updateReviewStatus(
     const prevStatus = reviews[idx].status;
     reviews[idx].status = status;
     write(KEYS.reviews, reviews);
+    emitStoreEvent(STORE_EVENTS.reviews);
     reviewApi.updateReviewStatus(reviewId, status).catch(err => console.warn('API updateReviewStatus failed:', err));
 
     if (prevStatus !== status && (status === 'approved' || status === 'rejected')) {
@@ -915,6 +970,7 @@ export function deleteReview(reviewId: string, moderator?: User | null): void {
   const reviews = getReviews();
   const target = reviews.find(r => r.id === reviewId);
   write(KEYS.reviews, reviews.filter(r => r.id !== reviewId));
+  emitStoreEvent(STORE_EVENTS.reviews);
   reviewApi.deleteReview(reviewId).catch(err => console.warn('API deleteReview failed:', err));
 
   if (target) {
@@ -956,9 +1012,7 @@ export function deleteReview(reviewId: string, moderator?: User | null): void {
       });
     });
 
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('cinebook:notifications_updated'));
-    }
+    emitStoreEvent(STORE_EVENTS.notifications);
   }
 }
 
@@ -983,10 +1037,12 @@ export function savePromotion(promo: Promotion): void {
     );
   }
   write(KEYS.promotions, promos);
+  emitStoreEvent(STORE_EVENTS.promotions);
 }
 
 export function deletePromotion(id: string): void {
   write(KEYS.promotions, getPromotions().filter(p => p.id !== id));
+  emitStoreEvent(STORE_EVENTS.promotions);
   promotionApi.deletePromotion(id).catch(err =>
     console.warn('API deletePromotion sync failed, deletion kept locally:', err)
   );
@@ -1043,6 +1099,7 @@ export function toggleWishlist(userId: string, movieId: string): boolean {
     }
     all[userId] = list;
     localStorage.setItem(KEYS.wishlist, JSON.stringify(all));
+    emitStoreEvent(STORE_EVENTS.wishlist);
     wishlistApi.toggleWishlist(userId, movieId).catch(err => console.warn('API toggleWishlist failed:', err));
     return wishlisted;
   } catch {
@@ -1150,6 +1207,7 @@ export function joinWaitlist(showtimeId: string, user: { id: string; name: strin
     list.push(newEntry);
     all[showtimeId] = list;
     localStorage.setItem(KEYS.waitlists, JSON.stringify(all));
+    emitStoreEvent(STORE_EVENTS.waitlists);
     waitlistApi.joinWaitlist({
       showtimeId,
       userId: user.id,
@@ -1163,6 +1221,7 @@ export function joinWaitlist(showtimeId: string, user: { id: string; name: strin
         if (it) it.id = saved.id;
         curAll[showtimeId] = curList;
         localStorage.setItem(KEYS.waitlists, JSON.stringify(curAll));
+        emitStoreEvent(STORE_EVENTS.waitlists);
       }
     }).catch(err => console.warn('API joinWaitlist failed:', err));
     return true;

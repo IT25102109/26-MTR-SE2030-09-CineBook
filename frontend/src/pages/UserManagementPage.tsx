@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Plus, Search, Edit2, Trash2, UserCircle, Shield, Award, Crown } from 'lucide-react';
-import { getUsers, saveUser, deleteUser, awardLoyaltyPoints } from '@/data/store';
+import { getUsers, saveUser, deleteUser, awardLoyaltyPoints, STORE_EVENTS } from '@/data/store';
+import { useStoreSync } from '@/hooks/useStoreSync';
 import { useToast } from '@/contexts/ToastContext';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -27,7 +28,8 @@ const avatarColors = ['#F5C518', '#E50914', '#3B82F6', '#10B981', '#F97316', '#8
 export function UserManagementPage() {
   const { toast } = useToast();
   const [tick, setTick] = useState(0);
-  const users = useMemo(() => getUsers(), [tick]);
+  const storeTick = useStoreSync(STORE_EVENTS.users);
+  const users = useMemo(() => getUsers(), [tick, storeTick]);
 
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');

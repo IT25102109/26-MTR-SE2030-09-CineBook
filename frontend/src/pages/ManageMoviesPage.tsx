@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Plus, Search, Edit2, Trash2, Film, MessageSquare, CheckCircle, XCircle, Star } from 'lucide-react';
-import { getMovies, saveMovie, deleteMovie, getAllReviewsForModeration, updateReviewStatus, deleteReview } from '@/data/store';
+import { getMovies, saveMovie, deleteMovie, getAllReviewsForModeration, updateReviewStatus, deleteReview, STORE_EVENTS } from '@/data/store';
+import { useStoreSync } from '@/hooks/useStoreSync';
 import { movieApi } from '@/api/movieApi';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -32,6 +33,8 @@ const emptyMovie: Omit<Movie, 'id'> = {
 export function ManageMoviesPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const storeTick = useStoreSync([STORE_EVENTS.movies, STORE_EVENTS.reviews]);
+
   const [movies, setMovies] = useState<Movie[]>(() => getMovies());
   const [loading, setLoading] = useState(false);
 
@@ -48,12 +51,17 @@ export function ManageMoviesPage() {
   const [reviewTick, setReviewTick] = useState(0);
   const [reviewFilter, setReviewFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
 
-  const allReviews = useMemo(() => getAllReviewsForModeration(), [reviewTick]);
+  const allReviews = useMemo(() => getAllReviewsForModeration(), [reviewTick, storeTick]);
   const pendingReviewsCount = useMemo(() => allReviews.filter(r => r.status === 'pending').length, [allReviews]);
   const filteredReviews = useMemo(() => {
     if (reviewFilter === 'all') return allReviews;
     return allReviews.filter(r => r.status === reviewFilter);
   }, [allReviews, reviewFilter]);
+
+  // Synchronize local state with store on storeTick
+  useEffect(() => {
+    setMovies(getMovies());
+  }, [storeTick]);
 
   // Fetch live movies from backend API or local store on mount
   const loadMovies = async () => {

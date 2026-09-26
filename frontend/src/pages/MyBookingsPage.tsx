@@ -35,8 +35,10 @@ import {
   saveNotification,
   getUsers,
   getBookings,
-  saveBooking
+  saveBooking,
+  STORE_EVENTS,
 } from '@/data/store';
+import { useStoreSync } from '@/hooks/useStoreSync';
 import { getGoogleCalendarUrl, downloadIcsFile } from './ETicketPage';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -82,6 +84,7 @@ export function MyBookingsPage() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [calendarMenuTarget, setCalendarMenuTarget] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const storeTick = useStoreSync([STORE_EVENTS.bookings, STORE_EVENTS.showtimes]);
 
   const allBookings = useMemo(() => {
     if (!user) return [];
@@ -93,7 +96,7 @@ export function MyBookingsPage() {
     return getUserBookings(user.id).sort(
       (a, b) => new Date(b.bookingDate).getTime() - new Date(a.bookingDate).getTime()
     );
-  }, [user, tick, activeTab, isAdminOrManager]);
+  }, [user, tick, storeTick, activeTab, isAdminOrManager]);
 
   // Calculate Tiered Refund based on hours before showtime
   const calculateRefund = (booking: Booking): RefundCalculation => {

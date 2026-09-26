@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams, Navigate } from 'react-router-dom';
 import { Search, SlidersHorizontal, MapPin, Sparkles, CalendarDays, RotateCcw, Bookmark } from 'lucide-react';
-import { getMovies, getBranches, getShowtimes, isMovieWishlisted } from '@/data/store';
+import { getMovies, getBranches, getShowtimes, isMovieWishlisted, STORE_EVENTS } from '@/data/store';
+import { useStoreSync } from '@/hooks/useStoreSync';
 import { useAuth } from '@/contexts/AuthContext';
 import { MovieCard } from '@/components/movies/MovieCard';
 import { Select } from '@/components/ui/Input';
@@ -13,10 +14,12 @@ export function MoviesPage() {
     return <Navigate to="/manage/movies" replace />;
   }
 
+  const storeTick = useStoreSync([STORE_EVENTS.movies, STORE_EVENTS.branches, STORE_EVENTS.showtimes, STORE_EVENTS.wishlist]);
+
   const [searchParams, setSearchParams] = useSearchParams();
-  const allMovies = useMemo(() => getMovies(), []);
-  const branches = useMemo(() => getBranches(), []);
-  const showtimes = useMemo(() => getShowtimes(), []);
+  const allMovies = useMemo(() => getMovies(), [storeTick]);
+  const branches = useMemo(() => getBranches(), [storeTick]);
+  const showtimes = useMemo(() => getShowtimes(), [storeTick]);
 
   const [search, setSearch] = useState('');
   const statusFilter = searchParams.get('filter') || 'all';

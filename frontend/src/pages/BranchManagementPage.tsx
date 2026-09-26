@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, Building2, MapPin, Film, Shield, Lock } from 'lucide-react';
-import { getBranches, saveBranch, deleteBranch } from '@/data/store';
+import { getBranches, saveBranch, deleteBranch, STORE_EVENTS } from '@/data/store';
+import { useStoreSync } from '@/hooks/useStoreSync';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { Button } from '@/components/ui/Button';
@@ -15,7 +16,8 @@ export function BranchManagementPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [tick, setTick] = useState(0);
-  const branches = useMemo(() => getBranches(), [tick]);
+  const storeTick = useStoreSync(STORE_EVENTS.branches);
+  const branches = useMemo(() => getBranches(), [tick, storeTick]);
 
   const isCinemaManager = user?.role === 'cinemaManager';
   const assignedBranchId = user?.assignedBranchId;

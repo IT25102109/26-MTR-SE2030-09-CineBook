@@ -11,7 +11,9 @@ import {
   getUsers,
   getBranches,
   broadcastNotification,
+  STORE_EVENTS,
 } from '@/data/store';
+import { useStoreSync } from '@/hooks/useStoreSync';
 import { NotificationIcon } from '@/components/notifications/NotificationIcon';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -38,7 +40,7 @@ const typeLabels: Record<string, string> = {
 const roleLabels: Record<Role, string> = {
   customer: 'Customers',
   cinemaManager: 'Cinema Managers',
-  admin: 'Admins',
+  admin: 'Admin',
 };
 
 const tierTargetLabels: Record<string, string> = {
@@ -59,10 +61,16 @@ export function AdminNotificationsPage() {
   const [tick, setTick] = useState(0);
   const [activeTab, setActiveTab] = useState<Tab>('broadcasts');
 
-  const sentNotifications = useMemo(() => getAllSentNotifications(), [tick]);
-  const templates = useMemo(() => getNotificationTemplates(), [tick]);
-  const users = useMemo(() => getUsers(), []);
-  const branches = useMemo(() => getBranches(), []);
+  const storeTick = useStoreSync([
+    STORE_EVENTS.notifications,
+    STORE_EVENTS.users,
+    STORE_EVENTS.branches,
+  ]);
+
+  const sentNotifications = useMemo(() => getAllSentNotifications(), [tick, storeTick]);
+  const templates = useMemo(() => getNotificationTemplates(), [tick, storeTick]);
+  const users = useMemo(() => getUsers(), [storeTick]);
+  const branches = useMemo(() => getBranches(), [storeTick]);
 
   const [composeOpen, setComposeOpen] = useState(false);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);

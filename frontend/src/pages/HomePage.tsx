@@ -3,7 +3,8 @@ import { Link, Navigate } from 'react-router-dom';
 import { ChevronRight, TrendingUp, Calendar, Sparkles } from 'lucide-react';
 import { HeroCarousel } from '@/components/movies/HeroCarousel';
 import { MovieCard } from '@/components/movies/MovieCard';
-import { getMovies, getBranches, getPersonalizedRecommendations } from '@/data/store';
+import { getMovies, getBranches, getPersonalizedRecommendations, STORE_EVENTS } from '@/data/store';
+import { useStoreSync } from '@/hooks/useStoreSync';
 import { useAuth } from '@/contexts/AuthContext';
 
 export function HomePage() {
@@ -16,9 +17,11 @@ export function HomePage() {
     return <Navigate to="/admin/analytics" replace />;
   }
 
-  const movies = useMemo(() => getMovies(), []);
-  const branches = useMemo(() => getBranches(), []);
-  const recommendations = useMemo(() => getPersonalizedRecommendations(user?.id || 'guest'), [user]);
+  const storeTick = useStoreSync([STORE_EVENTS.movies, STORE_EVENTS.branches, STORE_EVENTS.bookings, STORE_EVENTS.wishlist]);
+
+  const movies = useMemo(() => getMovies(), [storeTick]);
+  const branches = useMemo(() => getBranches(), [storeTick]);
+  const recommendations = useMemo(() => getPersonalizedRecommendations(user?.id || 'guest'), [user, storeTick]);
 
   const featured = movies.filter(m => m.featured);
   const nowShowing = movies.filter(m => m.status === 'now-showing');

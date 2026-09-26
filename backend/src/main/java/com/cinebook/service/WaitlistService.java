@@ -45,3 +45,4 @@ public class WaitlistService {
         waitlistRepository.deleteById(id);
     }
 }
+

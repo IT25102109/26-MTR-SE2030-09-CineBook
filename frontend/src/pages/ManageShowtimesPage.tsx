@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Plus, Search, Trash2, Calendar, Clock, Film, MapPin, Tag, CheckCircle, XCircle, Sparkles, MessageSquare, AlertTriangle, Copy, Shield, Lock, Star } from 'lucide-react';
-import { getShowtimes, getMovies, getBranches, saveShowtime, deleteShowtime, getPromotions, savePromotion, deletePromotion, getAllReviewsForModeration, updateReviewStatus, deleteReview } from '@/data/store';
+import { getShowtimes, getMovies, getBranches, saveShowtime, deleteShowtime, getPromotions, savePromotion, deletePromotion, getAllReviewsForModeration, updateReviewStatus, deleteReview, STORE_EVENTS } from '@/data/store';
+import { useStoreSync } from '@/hooks/useStoreSync';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { Button } from '@/components/ui/Button';
@@ -18,11 +19,27 @@ export function ManageShowtimesPage() {
   const { toast } = useToast();
   const [tick, setTick] = useState(0);
 
-  const showtimes = useMemo(() => getShowtimes(), [tick]);
-  const movies = useMemo(() => getMovies(), []);
-  const branches = useMemo(() => getBranches(), []);
-  const promotions = useMemo(() => getPromotions(), [tick]);
-  const reviews = useMemo(() => getAllReviewsForModeration(), [tick]);
+  // Auto-sync whenever showtimes, movies, branches, promotions, or reviews mutate
+  const storeTick = useStoreSync([
+    STORE_EVENTS.showtimes,
+    STORE_EVENTS.movies,
+    STORE_EVENTS.branches,
+    STORE_EVENTS.promotions,
+    STORE_EVENTS.reviews,
+  ]);
+
+  const showtimes = useMemo(() => getShowtimes(), [tick, storeTick]);
+  const movies = useMemo(() => getMovies(), [storeTick]);
+  const branches = useMemo(() => getBranches(), [storeTick]);
+  const promotions = useMemo(() => getPromotions(), [tick, storeTick]);
+  const reviews = useMemo(() => getAllReviewsForModeration(), [tick, storeTick]);
+
+  // Extract all unique genres across movies
+  const allGenres = useMemo(() => {
+    const set = new Set<string>();
+    movies.forEach(m => m.genre?.forEach(g => set.add(g)));
+    return Array.from(set).sort();
+  }, [movies]);
 
   const [reviewFilter, setReviewFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
   const pendingReviewsCount = useMemo(() => reviews.filter(r => r.status === 'pending').length, [reviews]);
@@ -37,6 +54,7 @@ export function ManageShowtimesPage() {
 
   const [search, setSearch] = useState('');
   const [movieFilter, setMovieFilter] = useState('all');
+  const [genreFilter, setGenreFilter] = useState('all');
   const [branchFilter, setBranchFilter] = useState(isCinemaManager && assignedBranchId ? assignedBranchId : 'all');
   const [modalOpen, setModalOpen] = useState(false);
   const [promoModalOpen, setPromoModalOpen] = useState(false);
@@ -49,15 +67,32 @@ export function ManageShowtimesPage() {
   const [cloneTargetDays, setCloneTargetDays] = useState(1);
   const [cloneBranchId, setCloneBranchId] = useState(initialBranchId);
 
+  // Add Showtime form & multi-slot state
+  const [modalGenreFilter, setModalGenreFilter] = useState('all');
+  const [selectedTimes, setSelectedTimes] = useState<string[]>([times[0]]);
+  const [customTimeInput, setCustomTimeInput] = useState('');
+  const [repeatDays, setRepeatDays] = useState(1);
+  const [keepModalOpen, setKeepModalOpen] = useState(false);
+
   const [formData, setFormData] = useState({
     movieId: movies[0]?.id || '',
     branchId: initialBranchId,
     hallId: branches.find(b => b.id === initialBranchId)?.halls[0]?.id || branches[0]?.halls[0]?.id || '',
     date: new Date().toISOString().split('T')[0],
-    time: times[0],
     basePrice: 14.99,
     premiumPrice: 22.99,
   });
+
+  // Movies filtered by modal genre dropdown
+  const modalFilteredMovies = useMemo(() => {
+    if (modalGenreFilter === 'all') return movies;
+    return movies.filter(m => m.genre?.includes(modalGenreFilter));
+  }, [movies, modalGenreFilter]);
+
+  // Selected movie object
+  const selectedMovie = useMemo(() => {
+    return movies.find(m => m.id === formData.movieId) || modalFilteredMovies[0];
+  }, [movies, formData.movieId, modalFilteredMovies]);
 
   // Promo form state
   const [newPromo, setNewPromo] = useState<Omit<Promotion, 'id'>>({
@@ -97,31 +132,88 @@ export function ManageShowtimesPage() {
     return h * 60 + m;
   };
 
-  const conflictWarning = useMemo(() => {
-    if (!modalOpen || !formData.branchId || !formData.hallId || !formData.date || !formData.time) {
-      return null;
-    }
-    const formMins = parseTimeToMinutes(formData.time);
-    const sameHallShows = showtimes.filter(s =>
-      s.branchId === formData.branchId &&
-      s.hallId === formData.hallId &&
-      s.date === formData.date
-    );
-    for (const existing of sameHallShows) {
-      const existingMins = parseTimeToMinutes(existing.time);
-      if (Math.abs(formMins - existingMins) < 150) { // 2.5h buffer slot
-        const existingMovie = movies.find(m => m.id === existing.movieId);
-        const branchObj = branches.find(b => b.id === existing.branchId);
-        const hallObj = branchObj?.halls.find(h => h.id === existing.hallId);
-        return {
-          existingTime: existing.time,
-          movieTitle: existingMovie?.title || 'Another Movie',
-          hallName: hallObj?.name || 'Selected Hall',
-        };
+  // Planned slots across dates and selected times
+  const plannedSlots = useMemo(() => {
+    if (!formData.date || selectedTimes.length === 0) return [];
+    const baseDate = new Date(formData.date + 'T00:00:00');
+    const slots: Array<{ date: string; time: string }> = [];
+    for (let day = 0; day < repeatDays; day++) {
+      const d = new Date(baseDate);
+      d.setDate(d.getDate() + day);
+      const dateStr = d.toISOString().split('T')[0];
+      for (const time of selectedTimes) {
+        slots.push({ date: dateStr, time });
       }
     }
-    return null;
-  }, [modalOpen, formData.branchId, formData.hallId, formData.date, formData.time, showtimes, movies, branches]);
+    return slots;
+  }, [formData.date, selectedTimes, repeatDays]);
+
+  // Batch conflict calculation
+  const { validSlots, conflictingSlots } = useMemo(() => {
+    if (!modalOpen || !formData.branchId || !formData.hallId || plannedSlots.length === 0) {
+      return { validSlots: plannedSlots, conflictingSlots: [] };
+    }
+
+    const valid: Array<{ date: string; time: string }> = [];
+    const conflicting: Array<{
+      date: string;
+      time: string;
+      existingMovie: string;
+      existingTime: string;
+      hallName: string;
+    }> = [];
+
+    const branchObj = branches.find(b => b.id === formData.branchId);
+    const hallObj = branchObj?.halls.find(h => h.id === formData.hallId);
+    const hallName = hallObj?.name || 'Selected Hall';
+
+    for (const slot of plannedSlots) {
+      const formMins = parseTimeToMinutes(slot.time);
+      const sameHallShows = showtimes.filter(s =>
+        s.branchId === formData.branchId &&
+        s.hallId === formData.hallId &&
+        s.date === slot.date
+      );
+
+      let hasConflict = false;
+      for (const existing of sameHallShows) {
+        const existingMins = parseTimeToMinutes(existing.time);
+        if (Math.abs(formMins - existingMins) < 150) {
+          const existingMovie = movies.find(m => m.id === existing.movieId);
+          conflicting.push({
+            date: slot.date,
+            time: slot.time,
+            existingMovie: existingMovie?.title || 'Another Movie',
+            existingTime: existing.time,
+            hallName,
+          });
+          hasConflict = true;
+          break;
+        }
+      }
+
+      if (!hasConflict) {
+        valid.push(slot);
+      }
+    }
+
+    return { validSlots: valid, conflictingSlots: conflicting };
+  }, [modalOpen, formData.branchId, formData.hallId, plannedSlots, showtimes, movies, branches]);
+
+  const toggleTimeSlot = (time: string) => {
+    setSelectedTimes(prev =>
+      prev.includes(time) ? prev.filter(t => t !== time) : [...prev, time]
+    );
+  };
+
+  const handleAddCustomTime = () => {
+    const clean = customTimeInput.trim();
+    if (!clean) return;
+    if (!selectedTimes.includes(clean)) {
+      setSelectedTimes(prev => [...prev, clean]);
+    }
+    setCustomTimeInput('');
+  };
 
   const handleBulkClone = async () => {
     const sourceShows = showtimes.filter(s =>
@@ -171,6 +263,10 @@ export function ManageShowtimesPage() {
   const filtered = showtimes.filter(s => {
     if (movieFilter !== 'all' && s.movieId !== movieFilter) return false;
     if (branchFilter !== 'all' && s.branchId !== branchFilter) return false;
+    if (genreFilter !== 'all') {
+      const movie = movies.find(m => m.id === s.movieId);
+      if (!movie || !movie.genre?.includes(genreFilter)) return false;
+    }
     if (search) {
       const movie = movies.find(m => m.id === s.movieId);
       if (!movie?.title.toLowerCase().includes(search.toLowerCase())) return false;
@@ -187,33 +283,55 @@ export function ManageShowtimesPage() {
 
   const availableHalls = branches.find(b => b.id === formData.branchId)?.halls || [];
 
-  const handleSave = async () => {
-    if (!formData.movieId || !formData.branchId || !formData.hallId) {
+  const handleBatchSave = async () => {
+    const targetMovieId = formData.movieId || modalFilteredMovies[0]?.id || movies[0]?.id;
+    if (!targetMovieId || !formData.branchId || !formData.hallId) {
       toast('error', 'Please select a movie, branch, and hall');
       return;
     }
-    if (conflictWarning) {
-      toast('error', `Scheduling Conflict: Hall is already occupied by "${conflictWarning.movieTitle}" at ${conflictWarning.existingTime}`);
+    if (selectedTimes.length === 0) {
+      toast('error', 'Please select at least one screening time slot');
       return;
     }
-    const showtime: Showtime = {
-      id: '',
-      ...formData,
-      bookedSeats: [],
-    };
-    try {
-      const saved = await saveShowtime(showtime);
-      setModalOpen(false);
-      setTick(t => t + 1);
-      if (saved.id && !saved.id.startsWith('s')) {
-        toast('success', `Showtime #${saved.id} synced with MySQL database!`);
-      } else {
-        toast('success', 'Showtime added successfully');
+    if (validSlots.length === 0) {
+      toast('error', 'All selected showtime slots conflict with existing screenings in this hall');
+      return;
+    }
+
+    let savedCount = 0;
+    for (const slot of validSlots) {
+      const showtime: Showtime = {
+        id: '',
+        movieId: targetMovieId,
+        branchId: formData.branchId,
+        hallId: formData.hallId,
+        date: slot.date,
+        time: slot.time,
+        basePrice: formData.basePrice,
+        premiumPrice: formData.premiumPrice,
+        bookedSeats: [],
+      };
+      try {
+        await saveShowtime(showtime);
+        savedCount++;
+      } catch (err) {
+        console.warn('Error saving showtime slot:', err);
       }
-    } catch {
+    }
+
+    setTick(t => t + 1);
+    toast(
+      'success',
+      `Successfully scheduled ${savedCount} showtime${savedCount > 1 ? 's' : ''}${
+        repeatDays > 1 ? ` across ${repeatDays} days` : ''
+      }!`
+    );
+
+    if (keepModalOpen) {
+      // Clear times so manager can immediately add more slots for this same hall/branch/movie
+      setSelectedTimes([]);
+    } else {
       setModalOpen(false);
-      setTick(t => t + 1);
-      toast('info', 'Showtime added locally (backend sync pending)');
     }
   };
 
@@ -263,7 +381,7 @@ export function ManageShowtimesPage() {
       </div>
 
       <Card className="p-4 mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
             <input
@@ -277,6 +395,10 @@ export function ManageShowtimesPage() {
           <Select value={movieFilter} onChange={e => setMovieFilter(e.target.value)}>
             <option value="all">All Movies</option>
             {movies.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
+          </Select>
+          <Select value={genreFilter} onChange={e => setGenreFilter(e.target.value)}>
+            <option value="all">All Genres ({allGenres.length})</option>
+            {allGenres.map(g => <option key={g} value={g}>{g}</option>)}
           </Select>
           <Select
             value={branchFilter}
@@ -302,12 +424,26 @@ export function ManageShowtimesPage() {
           {
             key: 'movie',
             header: 'Movie',
-            render: (s) => (
-              <div className="flex items-center gap-2">
-                <Film className="w-4 h-4 text-text-muted flex-shrink-0" />
-                <span className="font-medium">{getMovieTitle(s.movieId)}</span>
-              </div>
-            ),
+            render: (s) => {
+              const movie = movies.find(m => m.id === s.movieId);
+              return (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Film className="w-4 h-4 text-text-muted flex-shrink-0" />
+                    <span className="font-medium">{movie?.title || getMovieTitle(s.movieId)}</span>
+                  </div>
+                  {movie?.genre && movie.genre.length > 0 && (
+                    <div className="flex flex-wrap gap-1 pl-6">
+                      {movie.genre.slice(0, 3).map(g => (
+                        <span key={g} className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-text-muted border border-white/5">
+                          {g}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            },
           },
           {
             key: 'branch',
@@ -392,42 +528,30 @@ export function ManageShowtimesPage() {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title="Add Showtime"
-        size="md"
+        title="Add Showtime(s) • Multi-Schedule"
+        size="lg"
         footer={
           <>
             <Button variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={!!conflictWarning}>
-              {conflictWarning ? 'Cannot Add (Conflict)' : 'Add Showtime'}
+            <Button onClick={handleBatchSave} disabled={validSlots.length === 0}>
+              {validSlots.length === 0
+                ? 'No Valid Slots Selected'
+                : `Schedule ${validSlots.length} Showtime${validSlots.length > 1 ? 's' : ''}`}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
-          {/* Conflict Warning Banner */}
-          {conflictWarning && (
-            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-2.5">
-              <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold text-amber-300">Scheduling Conflict Detected!</p>
-                <p className="text-text-secondary mt-0.5 leading-relaxed">
-                  "{conflictWarning.movieTitle}" is already scheduled in {conflictWarning.hallName} at {conflictWarning.existingTime}.
-                  Cinema halls require a 2.5h turnaround slot to prevent overlapping screenings.
-                </p>
-              </div>
-            </div>
-          )}
-
           {/* Dynamic Pricing Live Banner */}
           <div className="p-3 rounded-xl bg-cinema-card hairline border border-accent-primary/20 flex items-center justify-between text-xs">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-accent-primary flex-shrink-0" />
               <span>
-                {isWeekend(formData.date) && isPeakHour(formData.time)
+                {isWeekend(formData.date) && selectedTimes.some(t => isPeakHour(t))
                   ? '⚡ Peak Evening + Weekend Surge (+35% automatically factored in backend)'
                   : isWeekend(formData.date)
                   ? '⚡ Weekend Surge (+20% automatically factored in backend)'
-                  : isPeakHour(formData.time)
+                  : selectedTimes.some(t => isPeakHour(t))
                   ? '⚡ Evening Peak Surge (+15% automatically factored in backend)'
                   : 'Standard Off-Peak Weekday Slot'}
               </span>
@@ -435,33 +559,245 @@ export function ManageShowtimesPage() {
             <Badge variant="amber">Dynamic Engine</Badge>
           </div>
 
-          <Select label="Movie" value={formData.movieId} onChange={e => setFormData({ ...formData, movieId: e.target.value })}>
-            {movies.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
-          </Select>
-          <Select
-            label="Branch"
-            value={formData.branchId}
-            disabled={isCinemaManager && !!assignedBranchId}
-            onChange={e => setFormData({ ...formData, branchId: e.target.value, hallId: branches.find(b => b.id === e.target.value)?.halls[0]?.id || '' })}
-          >
-            {branches.map(b => (
-              <option key={b.id} value={b.id}>
-                {b.name} {isCinemaManager && b.id === assignedBranchId ? '(Assigned to you)' : ''}
-              </option>
-            ))}
-          </Select>
-          <Select label="Hall" value={formData.hallId} onChange={e => setFormData({ ...formData, hallId: e.target.value })}>
-            {availableHalls.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
-          </Select>
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="Date" type="date" value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} />
-            <Select label="Time" value={formData.time} onChange={e => setFormData({ ...formData, time: e.target.value })}>
-              {times.map(t => <option key={t} value={t}>{t}</option>)}
+          {/* Genre Filter & Movie Selection */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Select
+              label="Filter Movies by Genre"
+              value={modalGenreFilter}
+              onChange={e => {
+                const g = e.target.value;
+                setModalGenreFilter(g);
+                const matching = g === 'all' ? movies : movies.filter(m => m.genre?.includes(g));
+                if (matching.length > 0 && !matching.some(m => m.id === formData.movieId)) {
+                  setFormData(prev => ({ ...prev, movieId: matching[0].id }));
+                }
+              }}
+            >
+              <option value="all">All Genres ({allGenres.length})</option>
+              {allGenres.map(g => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </Select>
+
+            <Select
+              label="Movie"
+              value={formData.movieId}
+              onChange={e => setFormData({ ...formData, movieId: e.target.value })}
+            >
+              {modalFilteredMovies.map(m => (
+                <option key={m.id} value={m.id}>
+                  {m.title}
+                </option>
+              ))}
             </Select>
           </div>
+
+          {/* Selected Movie Details Preview */}
+          {selectedMovie && (
+            <div className="text-xs text-text-secondary flex items-center gap-2 flex-wrap bg-cinema-base/60 p-2.5 rounded-xl border border-white/5">
+              <Film className="w-3.5 h-3.5 text-accent-primary" />
+              <span className="font-semibold text-text-primary">{selectedMovie.title}</span>
+              <span>•</span>
+              <span>{selectedMovie.duration} mins</span>
+              <span>•</span>
+              <span>{selectedMovie.language}</span>
+              <span>•</span>
+              <div className="flex items-center gap-1">
+                {selectedMovie.genre?.map(g => (
+                  <span key={g} className="px-1.5 py-0.5 rounded bg-accent-primary/10 text-accent-primary text-[10px] font-medium">
+                    {g}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Branch & Hall Selection */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Select
+              label="Branch"
+              value={formData.branchId}
+              disabled={isCinemaManager && !!assignedBranchId}
+              onChange={e => setFormData({
+                ...formData,
+                branchId: e.target.value,
+                hallId: branches.find(b => b.id === e.target.value)?.halls[0]?.id || ''
+              })}
+            >
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>
+                  {b.name} {isCinemaManager && b.id === assignedBranchId ? '(Assigned to you)' : ''}
+                </option>
+              ))}
+            </Select>
+            <Select
+              label="Hall"
+              value={formData.hallId}
+              onChange={e => setFormData({ ...formData, hallId: e.target.value })}
+            >
+              {availableHalls.map(h => (
+                <option key={h.id} value={h.id}>
+                  {h.name} ({h.rows * h.seatsPerRow} seats)
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          {/* Date & Multi-Day Recurrence */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Start Date"
+              type="date"
+              value={formData.date}
+              onChange={e => setFormData({ ...formData, date: e.target.value })}
+            />
+            <Select
+              label="Repeat for Consecutive Days"
+              value={repeatDays}
+              onChange={e => setRepeatDays(Number(e.target.value))}
+            >
+              <option value={1}>1 Day (Start date only)</option>
+              <option value={2}>2 Days (Today & Tomorrow)</option>
+              <option value={3}>3 Days (Next 3 days)</option>
+              <option value={5}>5 Days (Weekdays / 5 days)</option>
+              <option value={7}>7 Days (Full 1-week run)</option>
+              <option value={14}>14 Days (2 weeks)</option>
+            </Select>
+          </div>
+
+          {/* Multi-Time Slots Selection */}
+          <div className="space-y-2 bg-cinema-base/40 p-3 rounded-xl border border-white/5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-text-primary flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-accent-primary" />
+                Select Screening Times ({selectedTimes.length} selected
+                {repeatDays > 1 ? ` × ${repeatDays} days = ${selectedTimes.length * repeatDays} showtimes` : ''})
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedTimes([...times])}
+                  className="text-[11px] text-accent-primary hover:underline cursor-pointer"
+                >
+                  Select All
+                </button>
+                <span className="text-text-muted">•</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTimes([])}
+                  className="text-[11px] text-text-muted hover:text-text-primary cursor-pointer"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 pt-1">
+              {times.map(t => {
+                const isSelected = selectedTimes.includes(t);
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => toggleTimeSlot(t)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+                      isSelected
+                        ? 'bg-accent-primary text-black font-semibold shadow-soft-sm'
+                        : 'bg-cinema-card border border-cinema-border text-text-secondary hover:text-text-primary hover:border-accent-primary/40'
+                    }`}
+                  >
+                    {t}
+                    {isSelected && <CheckCircle className="w-3.5 h-3.5" />}
+                  </button>
+                );
+              })}
+              {selectedTimes.filter(t => !times.includes(t)).map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => toggleTimeSlot(t)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-accent-primary text-black flex items-center gap-1.5 cursor-pointer"
+                >
+                  {t}
+                  <XCircle className="w-3.5 h-3.5 hover:text-red-900" />
+                </button>
+              ))}
+            </div>
+
+            {/* Custom Time Adder */}
+            <div className="flex gap-2 pt-2">
+              <input
+                type="text"
+                placeholder="Add custom time (e.g. 11:30 AM or 8:45 PM)"
+                value={customTimeInput}
+                onChange={e => setCustomTimeInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddCustomTime();
+                  }
+                }}
+                className="flex-1 bg-cinema-elevated border border-white/10 rounded-lg px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-primary/50"
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={handleAddCustomTime}
+                className="text-xs px-3"
+              >
+                + Add Slot
+              </Button>
+            </div>
+          </div>
+
+          {/* Pricing inputs */}
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Base Price ($)" type="number" step="0.01" value={formData.basePrice} onChange={e => setFormData({ ...formData, basePrice: parseFloat(e.target.value) || 0 })} />
-            <Input label="Premium Price ($)" type="number" step="0.01" value={formData.premiumPrice} onChange={e => setFormData({ ...formData, premiumPrice: parseFloat(e.target.value) || 0 })} />
+            <Input
+              label="Base Price ($)"
+              type="number"
+              step="0.01"
+              value={formData.basePrice}
+              onChange={e => setFormData({ ...formData, basePrice: parseFloat(e.target.value) || 0 })}
+            />
+            <Input
+              label="Premium Price ($)"
+              type="number"
+              step="0.01"
+              value={formData.premiumPrice}
+              onChange={e => setFormData({ ...formData, premiumPrice: parseFloat(e.target.value) || 0 })}
+            />
+          </div>
+
+          {/* Conflict Warning or Summary */}
+          {conflictingSlots.length > 0 && (
+            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs space-y-1">
+              <div className="flex items-center gap-2 font-semibold">
+                <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                <span>Scheduling Conflict ({conflictingSlots.length} slot{conflictingSlots.length > 1 ? 's' : ''} occupied)</span>
+              </div>
+              <p className="text-text-secondary pl-6 leading-relaxed">
+                {validSlots.length > 0
+                  ? `${validSlots.length} available slot(s) will still be safely scheduled. ${conflictingSlots.length} overlapping slot(s) will be automatically skipped.`
+                  : 'All selected time slots overlap with existing screenings (2.5h hall turnaround needed). Please pick different times.'}
+              </p>
+              <div className="pl-6 pt-1 text-[11px] text-amber-400/80">
+                Example conflict: {conflictingSlots[0]?.date} at {conflictingSlots[0]?.time} occupied by "{conflictingSlots[0]?.existingMovie}"
+              </div>
+            </div>
+          )}
+
+          {/* Keep Modal Open Checkbox */}
+          <div className="pt-2 border-t border-cinema-border">
+            <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer hover:text-text-primary select-none">
+              <input
+                type="checkbox"
+                checked={keepModalOpen}
+                onChange={e => setKeepModalOpen(e.target.checked)}
+                className="rounded border-white/20 text-accent-primary focus:ring-accent-primary/30"
+              />
+              <span>Keep dialog open after saving (rapid multi-slot scheduling for this branch/hall)</span>
+            </label>
           </div>
         </div>
       </Modal>

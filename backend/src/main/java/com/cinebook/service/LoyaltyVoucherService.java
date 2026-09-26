@@ -33,3 +33,4 @@ public class LoyaltyVoucherService {
         return loyaltyVoucherRepository.findByCode(code);
     }
 }
+

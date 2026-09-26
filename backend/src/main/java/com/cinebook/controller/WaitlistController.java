@@ -33,3 +33,4 @@ public class WaitlistController {
         waitlistService.removeFromWaitlist(id);
     }
 }
+

@@ -33,6 +33,7 @@ import {
   Legend
 } from 'recharts';
 import { getBookings, getMovies, getBranches, getUsers, getShowtimes } from '@/data/store';
+import { useStoreSync } from '@/hooks/useStoreSync';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -44,12 +45,13 @@ type DateRange = '7d' | '30d' | 'month' | 'all';
 export function AnalyticsPage() {
   const [dateRange, setDateRange] = useState<DateRange>('all');
   const [selectedBranchId, setSelectedBranchId] = useState<string>('all');
+  const storeTick = useStoreSync();
 
-  const bookings = useMemo(() => getBookings(), []);
-  const movies = useMemo(() => getMovies(), []);
-  const branches = useMemo(() => getBranches(), []);
-  const users = useMemo(() => getUsers(), []);
-  const showtimes = useMemo(() => getShowtimes(), []);
+  const bookings = useMemo(() => getBookings(), [storeTick]);
+  const movies = useMemo(() => getMovies(), [storeTick]);
+  const branches = useMemo(() => getBranches(), [storeTick]);
+  const users = useMemo(() => getUsers(), [storeTick]);
+  const showtimes = useMemo(() => getShowtimes(), [storeTick]);
 
   // Filter bookings based on dateRange and selectedBranchId
   const filteredBookings = useMemo(() => {
