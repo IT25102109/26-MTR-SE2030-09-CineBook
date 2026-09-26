@@ -66,6 +66,8 @@ export interface Showtime {
 
 export interface Booking {
   id: string;
+  bookingRef?: string;
+  tempId?: string;
   userId: string;
   movieId: string;
   movieTitle: string;

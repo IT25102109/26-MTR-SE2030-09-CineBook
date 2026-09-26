@@ -1,11 +1,14 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { CheckCircle2, Calendar, Clock, MapPin, Film, Download, Home, ShieldCheck, QrCode, ScanLine, ArrowRight, FileText, Printer, Share2, CalendarPlus, Copy, Check } from 'lucide-react';
-import { getBookings } from '@/data/store';
+import { CheckCircle2, Calendar, Clock, MapPin, Film, Download, Home, ShieldCheck, QrCode, ScanLine, ArrowRight, FileText, Printer, Share2, CalendarPlus, Copy, Check, Loader2 } from 'lucide-react';
+import { getBooking, saveBooking, STORE_EVENTS } from '@/data/store';
+import { bookingApi } from '@/api/bookingApi';
+import { useStoreSync } from '@/hooks/useStoreSync';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/contexts/ToastContext';
+import type { Booking } from '@/types';
 
 // Calendar Integration Helpers (Function 5: IT25101655)
 export function getGoogleCalendarUrl(booking: { movieTitle: string; branchName: string; hallName: string; date: string; time: string; seats: string[]; id: string }): string {
@@ -72,7 +75,37 @@ export function downloadIcsFile(booking: { movieTitle: string; branchName: strin
 export function ETicketPage() {
   const { bookingId } = useParams<{ bookingId: string }>();
   const { toast } = useToast();
-  const booking = useMemo(() => getBookings().find(b => b.id === bookingId), [bookingId]);
+  const storeTick = useStoreSync([STORE_EVENTS.bookings]);
+
+  const localBooking = useMemo(() => {
+    if (!bookingId) return undefined;
+    return getBooking(bookingId);
+  }, [bookingId, storeTick]);
+
+  const [remoteBooking, setRemoteBooking] = useState<Booking | null>(null);
+  const [loadingRemote, setLoadingRemote] = useState(false);
+
+  useEffect(() => {
+    if (!localBooking && bookingId) {
+      setLoadingRemote(true);
+      bookingApi
+        .getBooking(bookingId)
+        .then(fetched => {
+          if (fetched) {
+            setRemoteBooking(fetched);
+            saveBooking(fetched);
+          }
+        })
+        .catch(() => {
+          // Booking not in backend either
+        })
+        .finally(() => {
+          setLoadingRemote(false);
+        });
+    }
+  }, [localBooking, bookingId]);
+
+  const booking = localBooking || remoteBooking;
 
   const [showScannerModal, setShowScannerModal] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
@@ -105,6 +138,15 @@ export function ETicketPage() {
       }
     }, 1400);
   };
+
+  if (loadingRemote) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-24 text-center">
+        <Loader2 className="w-8 h-8 animate-spin text-accent-primary mx-auto mb-4" />
+        <p className="text-text-secondary">Loading your E-Ticket...</p>
+      </div>
+    );
+  }
 
   if (!booking) {
     return (
@@ -211,8 +253,8 @@ export function ETicketPage() {
 
               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5">
                 <div>
-                  <p className="text-xs text-text-muted uppercase tracking-wider mb-1">Booking ID</p>
-                  <p className="text-sm font-mono font-semibold text-text-primary">{booking.id}</p>
+                  <p className="text-xs text-text-muted uppercase tracking-wider mb-1">Booking Ref</p>
+                  <p className="text-sm font-mono font-semibold text-text-primary">{booking.bookingRef || booking.id}</p>
                 </div>
                 <div>
                   <p className="text-xs text-text-muted uppercase tracking-wider mb-1">Amount Paid</p>

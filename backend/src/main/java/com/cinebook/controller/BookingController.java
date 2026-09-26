@@ -29,8 +29,8 @@ public class BookingController {
     }
 
     @GetMapping("/{id}")
-    public Booking getBookingById(@PathVariable Long id) {
-        return bookingService.getBookingById(id);
+    public Booking getBookingById(@PathVariable String id) {
+        return bookingService.findByIdOrRef(id);
     }
 
     @GetMapping("/ref/{ref}")
@@ -48,15 +48,23 @@ public class BookingController {
         return bookingService.createBooking(booking);
     }
 
+    @PutMapping("/{id}")
+    public Booking updateBooking(@PathVariable String id, @RequestBody Booking updates) {
+        return bookingService.updateBooking(id, updates);
+    }
+
     @PutMapping("/{id}/cancel")
-    public Booking cancelBooking(@PathVariable Long id) {
-        return bookingService.cancelBooking(id);
+    public Booking cancelBooking(
+            @PathVariable String id,
+            @RequestParam(required = false) Double refundAmount,
+            @RequestParam(required = false) String refundStatus) {
+        return bookingService.cancelBooking(id, refundAmount, refundStatus);
     }
 
     @PutMapping("/{id}/reschedule")
     public Booking rescheduleBooking(
-            @PathVariable Long id,
-            @RequestParam Long newShowtimeId,
+            @PathVariable String id,
+            @RequestParam String newShowtimeId,
             @RequestParam String newDate,
             @RequestParam String newTime,
             @RequestParam String newHallName) {

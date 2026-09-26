@@ -397,13 +397,24 @@ export function getBookings(): Booking[] {
   return read<Booking>(KEYS.bookings);
 }
 
+export function getBooking(id: string): Booking | undefined {
+  return getBookings().find(b => b.id === id || b.tempId === id || b.bookingRef === id);
+}
+
 export function getUserBookings(userId: string): Booking[] {
   return getBookings().filter(b => b.userId === userId);
 }
 
 export function saveBooking(booking: Booking): void {
   const bookings = getBookings();
-  bookings.unshift(booking);
+  const existingIdx = bookings.findIndex(
+    b => b.id === booking.id || (booking.bookingRef && b.bookingRef === booking.bookingRef)
+  );
+  if (existingIdx >= 0) {
+    bookings[existingIdx] = { ...bookings[existingIdx], ...booking };
+  } else {
+    bookings.unshift(booking);
+  }
   write(KEYS.bookings, bookings);
   emitStoreEvent(STORE_EVENTS.bookings);
 
@@ -413,47 +424,93 @@ export function saveBooking(booking: Booking): void {
     awardLoyaltyPoints(booking.userId, earnedPoints);
   }
 
-  bookingApi.createBooking(booking).then(created => {
-    if (created.id && created.id !== booking.id) {
+  bookingApi
+    .createBooking(booking)
+    .then(created => {
       const current = getBookings();
-      const item = current.find(b => b.id === booking.id);
-      if (item) item.id = created.id;
-      write(KEYS.bookings, current);
-      emitStoreEvent(STORE_EVENTS.bookings);
-    }
-  }).catch(err =>
-    console.warn('API createBooking sync failed, kept locally:', err)
-  );
+      const item = current.find(
+        b =>
+          b.id === booking.id ||
+          b.tempId === booking.id ||
+          (booking.bookingRef && b.bookingRef === booking.bookingRef)
+      );
+      if (item) {
+        item.tempId = booking.id;
+        item.id = created.id;
+        if (created.bookingRef) item.bookingRef = created.bookingRef;
+        if (created.refundAmount !== undefined) item.refundAmount = created.refundAmount;
+        if (created.refundStatus) item.refundStatus = created.refundStatus;
+        if (created.rescheduledFrom) item.rescheduledFrom = created.rescheduledFrom;
+        write(KEYS.bookings, current);
+        emitStoreEvent(STORE_EVENTS.bookings);
+      }
+    })
+    .catch(err => console.warn('API createBooking sync failed, kept locally:', err));
 }
 
 export function updateBooking(id: string, updates: Partial<Booking>): void {
   const bookings = getBookings();
-  const idx = bookings.findIndex(b => b.id === id);
+  const idx = bookings.findIndex(b => b.id === id || b.tempId === id || b.bookingRef === id);
   if (idx >= 0) {
+    const targetId = bookings[idx].id;
     bookings[idx] = { ...bookings[idx], ...updates };
     write(KEYS.bookings, bookings);
     emitStoreEvent(STORE_EVENTS.bookings);
-    if (updates.status === 'cancelled') {
-      bookingApi.cancelBooking(id).catch(err =>
-        console.warn('API cancelBooking sync failed, kept locally:', err)
-      );
-    }
+
+    bookingApi
+      .updateBooking(targetId, updates)
+      .then(synced => {
+        const cur = getBookings();
+        const curIdx = cur.findIndex(
+          b => b.id === targetId || b.tempId === targetId || b.bookingRef === targetId
+        );
+        if (curIdx >= 0) {
+          cur[curIdx] = { ...cur[curIdx], ...synced };
+          write(KEYS.bookings, cur);
+          emitStoreEvent(STORE_EVENTS.bookings);
+        }
+      })
+      .catch(err => console.warn('API updateBooking sync failed, kept locally:', err));
   }
 }
 
 export function cancelBookingWithRefund(id: string, refundAmount: number): void {
   const bookings = getBookings();
-  const target = bookings.find(b => b.id === id);
+  const target = bookings.find(b => b.id === id || b.tempId === id || b.bookingRef === id);
   if (target) {
+    const targetId = target.id;
     // Release seats back to showtime inventory
     releaseShowtimeSeats(target.showtimeId, target.seats);
 
-    updateBooking(id, {
-      status: 'cancelled',
-      refundStatus: refundAmount > 0 ? 'processed' : 'none',
-      refundAmount: refundAmount,
-    });
-    emitStoreEvent(STORE_EVENTS.bookings);
+    const refStatus = refundAmount > 0 ? 'processed' : 'none';
+    const idx = bookings.findIndex(
+      b => b.id === targetId || b.tempId === targetId || b.bookingRef === targetId
+    );
+    if (idx >= 0) {
+      bookings[idx] = {
+        ...bookings[idx],
+        status: 'cancelled',
+        refundStatus: refStatus,
+        refundAmount: refundAmount,
+      };
+      write(KEYS.bookings, bookings);
+      emitStoreEvent(STORE_EVENTS.bookings);
+    }
+
+    bookingApi
+      .cancelBooking(targetId, refundAmount, refStatus)
+      .then(updated => {
+        const cur = getBookings();
+        const curIdx = cur.findIndex(
+          b => b.id === targetId || b.tempId === targetId || b.bookingRef === targetId
+        );
+        if (curIdx >= 0) {
+          cur[curIdx] = { ...cur[curIdx], ...updated };
+          write(KEYS.bookings, cur);
+          emitStoreEvent(STORE_EVENTS.bookings);
+        }
+      })
+      .catch(err => console.warn('API cancelBooking sync failed, kept locally:', err));
   }
 }
 
@@ -465,21 +522,47 @@ export function rescheduleBooking(
   newHallName: string
 ): void {
   const bookings = getBookings();
-  const target = bookings.find(b => b.id === id);
+  const target = bookings.find(b => b.id === id || b.tempId === id || b.bookingRef === id);
   if (target) {
+    const targetId = target.id;
+    const oldDate = target.date;
+    const oldTime = target.time;
+
     // Release seats from old showtime
     releaseShowtimeSeats(target.showtimeId, target.seats);
     // Reserve seats in new showtime
     updateShowtimeSeats(newShowtimeId, target.seats);
 
-    updateBooking(id, {
-      showtimeId: newShowtimeId,
-      date: newDate,
-      time: newTime,
-      hallName: newHallName,
-      rescheduledFrom: `${target.date} ${target.time}`,
-    });
-    emitStoreEvent(STORE_EVENTS.bookings);
+    const idx = bookings.findIndex(
+      b => b.id === targetId || b.tempId === targetId || b.bookingRef === targetId
+    );
+    if (idx >= 0) {
+      bookings[idx] = {
+        ...bookings[idx],
+        showtimeId: newShowtimeId,
+        date: newDate,
+        time: newTime,
+        hallName: newHallName,
+        rescheduledFrom: `${oldDate} ${oldTime}`,
+      };
+      write(KEYS.bookings, bookings);
+      emitStoreEvent(STORE_EVENTS.bookings);
+    }
+
+    bookingApi
+      .rescheduleBooking(targetId, newShowtimeId, newDate, newTime, newHallName)
+      .then(updated => {
+        const cur = getBookings();
+        const curIdx = cur.findIndex(
+          b => b.id === targetId || b.tempId === targetId || b.bookingRef === targetId
+        );
+        if (curIdx >= 0) {
+          cur[curIdx] = { ...cur[curIdx], ...updated };
+          write(KEYS.bookings, cur);
+          emitStoreEvent(STORE_EVENTS.bookings);
+        }
+      })
+      .catch(err => console.warn('API rescheduleBooking sync failed, kept locally:', err));
   }
 }
 

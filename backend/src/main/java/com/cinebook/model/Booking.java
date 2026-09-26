@@ -38,6 +38,7 @@ public class Booking {
 
     private String movieTitle;
 
+    @Column(length = 1000)
     private String moviePoster;
 
     private String branchId;
@@ -105,7 +106,16 @@ public class Booking {
 
     @JsonProperty("bookingDate")
     public void setBookingDate(String dateStr) {
-        // preserve existing or let prePersist initialize
+        if (this.createdAt == null && dateStr != null && !dateStr.isBlank()) {
+            try {
+                if (dateStr.length() == 10) {
+                    this.createdAt = java.time.LocalDate.parse(dateStr).atStartOfDay();
+                } else {
+                    this.createdAt = java.time.LocalDateTime.parse(dateStr);
+                }
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     @JsonProperty("seats")

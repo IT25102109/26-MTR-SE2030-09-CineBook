@@ -43,8 +43,40 @@ public class BookingService {
                 .orElseThrow(() -> new RuntimeException("Booking not found with ref: " + ref));
     }
 
+    public Booking findByIdOrRef(String identifier) {
+        if (identifier == null || identifier.isBlank()) {
+            throw new RuntimeException("Booking identifier cannot be empty");
+        }
+        try {
+            Long id = Long.parseLong(identifier.trim());
+            java.util.Optional<Booking> opt = bookingRepository.findById(id);
+            if (opt.isPresent()) {
+                return opt.get();
+            }
+        } catch (NumberFormatException ignored) {
+        }
+        return bookingRepository.findByBookingRef(identifier.trim())
+                .orElseThrow(() -> new RuntimeException("Booking not found with id or ref: " + identifier));
+    }
+
     public Booking createBooking(Booking booking) {
         booking.setId(null);
+        if (booking.getBookingRef() == null || booking.getBookingRef().isBlank()) {
+            booking.setBookingRef("CB-" + ((int) (Math.random() * 900000) + 100000));
+        }
+        if (booking.getStatus() == null || booking.getStatus().isBlank()) {
+            booking.setStatus("confirmed");
+        }
+        if (booking.getPaymentStatus() == null || booking.getPaymentStatus().isBlank()) {
+            booking.setPaymentStatus("paid");
+        }
+        if (booking.getRefundStatus() == null || booking.getRefundStatus().isBlank()) {
+            booking.setRefundStatus("none");
+        }
+        if (booking.getCreatedAt() == null) {
+            booking.setCreatedAt(java.time.LocalDateTime.now());
+        }
+
         // Persist booking record
         Booking saved = bookingRepository.save(booking);
 
@@ -63,37 +95,26 @@ public class BookingService {
         return saved;
     }
 
-    public Booking cancelBooking(Long id) {
-        Booking booking = getBookingById(id);
+    public Booking cancelBooking(String identifier, Double explicitRefundAmount, String explicitRefundStatus) {
+        Booking booking = findByIdOrRef(identifier);
         booking.setStatus("cancelled");
         booking.setPaymentStatus("refunded");
 
-        // Tiered refund calculation:
-        // > 24 hours prior to showtime: 100% refund
-        // 6 - 24 hours prior: 50% refund
-        // < 6 hours prior: 0% refund (non-refundable)
-        double refundRate = 1.0;
-        try {
-            if (booking.getDate() != null && booking.getTime() != null) {
-                java.time.LocalDate showDate = java.time.LocalDate.parse(booking.getDate());
-                java.time.LocalTime showTime = java.time.LocalTime.parse(booking.getTime());
-                java.time.LocalDateTime showDateTime = java.time.LocalDateTime.of(showDate, showTime);
-                long hoursUntil = java.time.Duration.between(java.time.LocalDateTime.now(), showDateTime).toHours();
-                if (hoursUntil > 24) {
-                    refundRate = 1.0;
-                } else if (hoursUntil >= 6) {
-                    refundRate = 0.5;
-                } else {
-                    refundRate = 0.0;
-                }
-            }
-        } catch (Exception ignored) {
-            refundRate = 1.0;
+        if (explicitRefundAmount != null && explicitRefundAmount >= 0) {
+            booking.setRefundAmount(explicitRefundAmount);
+            booking.setRefundStatus(explicitRefundStatus != null && !explicitRefundStatus.isBlank()
+                    ? explicitRefundStatus
+                    : (explicitRefundAmount > 0 ? "processed" : "none"));
+        } else {
+            // Tiered refund calculation:
+            // > 24 hours prior to showtime: 100% refund
+            // 6 - 24 hours prior: 50% refund
+            // < 6 hours prior: 0% refund (non-refundable)
+            double refundRate = calculateRefundRate(booking.getDate(), booking.getTime());
+            double refundAmount = Math.round(booking.getTotalAmount() * refundRate * 100.0) / 100.0;
+            booking.setRefundAmount(refundAmount);
+            booking.setRefundStatus(refundRate > 0 ? "processed" : "none");
         }
-
-        double refundAmount = booking.getTotalAmount() * refundRate;
-        booking.setRefundAmount(refundAmount);
-        booking.setRefundStatus(refundRate > 0 ? "processed" : "none");
 
         // Release seats from showtime inventory
         if (booking.getShowtimeId() != null && booking.getSeats() != null && !booking.getSeats().isEmpty()) {
@@ -107,13 +128,17 @@ public class BookingService {
         return bookingRepository.save(booking);
     }
 
-    public Booking rescheduleBooking(Long id, Long newShowtimeId, String newDate, String newTime, String newHallName) {
-        Booking booking = getBookingById(id);
+    public Booking cancelBooking(Long id) {
+        return cancelBooking(String.valueOf(id), null, null);
+    }
+
+    public Booking rescheduleBooking(String identifier, String newShowtimeId, String newDate, String newTime, String newHallName) {
+        Booking booking = findByIdOrRef(identifier);
         String oldDate = booking.getDate();
         String oldTime = booking.getTime();
 
         // Release seats from old showtime
-        if (booking.getShowtimeId() != null && booking.getSeats() != null) {
+        if (booking.getShowtimeId() != null && booking.getSeats() != null && !booking.getSeats().isEmpty()) {
             try {
                 Long oldStId = Long.parseLong(booking.getShowtimeId());
                 showtimeService.removeBookedSeats(oldStId, booking.getSeats());
@@ -122,19 +147,62 @@ public class BookingService {
         }
 
         // Add seats to new showtime
-        if (booking.getSeats() != null) {
+        if (newShowtimeId != null && booking.getSeats() != null && !booking.getSeats().isEmpty()) {
             try {
-                showtimeService.addBookedSeats(newShowtimeId, booking.getSeats());
+                Long stId = Long.parseLong(newShowtimeId);
+                showtimeService.addBookedSeats(stId, booking.getSeats());
             } catch (Exception ignored) {
             }
         }
 
-        booking.setShowtimeId(String.valueOf(newShowtimeId));
+        booking.setShowtimeId(newShowtimeId);
         booking.setDate(newDate);
         booking.setTime(newTime);
         booking.setHallName(newHallName);
         booking.setRescheduledFrom(oldDate + " " + oldTime);
 
         return bookingRepository.save(booking);
+    }
+
+    public Booking rescheduleBooking(Long id, Long newShowtimeId, String newDate, String newTime, String newHallName) {
+        return rescheduleBooking(String.valueOf(id), String.valueOf(newShowtimeId), newDate, newTime, newHallName);
+    }
+
+    public Booking updateBooking(String identifier, Booking updates) {
+        Booking booking = findByIdOrRef(identifier);
+        if (updates.getStatus() != null) booking.setStatus(updates.getStatus());
+        if (updates.getRefundStatus() != null) booking.setRefundStatus(updates.getRefundStatus());
+        if (updates.getRefundAmount() != null) booking.setRefundAmount(updates.getRefundAmount());
+        if (updates.getPaymentStatus() != null) booking.setPaymentStatus(updates.getPaymentStatus());
+        if (updates.getRescheduledFrom() != null) booking.setRescheduledFrom(updates.getRescheduledFrom());
+        return bookingRepository.save(booking);
+    }
+
+    private double calculateRefundRate(String dateStr, String timeStr) {
+        if (dateStr == null || timeStr == null || dateStr.isBlank() || timeStr.isBlank()) {
+            return 1.0;
+        }
+        try {
+            java.time.LocalDate showDate = java.time.LocalDate.parse(dateStr.trim());
+            java.time.LocalTime showTime;
+            String cleanTime = timeStr.trim().toUpperCase();
+            if (cleanTime.endsWith("AM") || cleanTime.endsWith("PM")) {
+                java.time.format.DateTimeFormatter dtf = java.time.format.DateTimeFormatter.ofPattern("h:mm a", java.util.Locale.ENGLISH);
+                showTime = java.time.LocalTime.parse(cleanTime, dtf);
+            } else {
+                showTime = java.time.LocalTime.parse(cleanTime);
+            }
+            java.time.LocalDateTime showDateTime = java.time.LocalDateTime.of(showDate, showTime);
+            long hoursUntil = java.time.Duration.between(java.time.LocalDateTime.now(), showDateTime).toHours();
+            if (hoursUntil > 24) {
+                return 1.0;
+            } else if (hoursUntil >= 6) {
+                return 0.5;
+            } else {
+                return 0.0;
+            }
+        } catch (Exception e) {
+            return 1.0;
+        }
     }
 }

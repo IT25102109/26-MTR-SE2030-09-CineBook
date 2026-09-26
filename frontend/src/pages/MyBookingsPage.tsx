@@ -101,8 +101,16 @@ export function MyBookingsPage() {
   // Calculate Tiered Refund based on hours before showtime
   const calculateRefund = (booking: Booking): RefundCalculation => {
     try {
-      const showtimeDateStr = `${booking.date}T${booking.time}:00`;
-      const showtimeTime = new Date(showtimeDateStr).getTime();
+      const rawTime = (booking.time || '18:00').trim();
+      const timePart = rawTime.split(' ')[0] || '18:00';
+      const [hStr, mStr] = timePart.split(':');
+      let h = parseInt(hStr, 10) || 18;
+      const m = parseInt(mStr, 10) || 0;
+      if (rawTime.toLowerCase().includes('pm') && h < 12) h += 12;
+      if (rawTime.toLowerCase().includes('am') && h === 12) h = 0;
+
+      const [y, mon, d] = (booking.date || '').split('-').map(Number);
+      const showtimeTime = new Date(y, (mon || 1) - 1, d || 1, h, m, 0).getTime();
       const now = Date.now();
       const diffHours = (showtimeTime - now) / (1000 * 60 * 60);
 
