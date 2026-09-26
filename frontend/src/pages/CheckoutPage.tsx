@@ -172,6 +172,8 @@ export function CheckoutPage() {
         totalAmount: finalTotal,
         status: 'confirmed',
         refundStatus: 'none',
+        paymentMethod: paymentMethod, // 'card' | 'wallet' | 'transfer'
+        paymentStatus: 'paid',
         bookingDate: new Date().toISOString().split('T')[0],
       };
 

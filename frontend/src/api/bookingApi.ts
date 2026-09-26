@@ -29,6 +29,8 @@ function normalizeBooking(raw: any): Booking {
     refundStatus: raw.refundStatus === 'processed' ? 'processed' : raw.refundStatus === 'pending' ? 'pending' : 'none',
     refundAmount: raw.refundAmount != null ? Number(raw.refundAmount) : undefined,
     rescheduledFrom: raw.rescheduledFrom || undefined,
+    paymentMethod: raw.paymentMethod || 'card',
+    paymentStatus: raw.paymentStatus || 'paid',
     bookingDate: raw.bookingDate || raw.createdAt || new Date().toISOString(),
   };
 }

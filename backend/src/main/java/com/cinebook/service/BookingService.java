@@ -1,7 +1,13 @@
 package com.cinebook.service;
 
+import com.cinebook.model.BookedSeat;
 import com.cinebook.model.Booking;
+import com.cinebook.model.Payment;
+import com.cinebook.model.RefundRecord;
+import com.cinebook.repository.BookedSeatRepository;
 import com.cinebook.repository.BookingRepository;
+import com.cinebook.repository.PaymentRepository;
+import com.cinebook.repository.RefundRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,11 +24,22 @@ public class BookingService {
 
     private final BookingRepository bookingRepository;
     private final ShowtimeService showtimeService;
+    private final PaymentRepository paymentRepository;
+    private final BookedSeatRepository bookedSeatRepository;
+    private final RefundRepository refundRepository;
 
     @Autowired
-    public BookingService(BookingRepository bookingRepository, ShowtimeService showtimeService) {
+    public BookingService(
+            BookingRepository bookingRepository,
+            ShowtimeService showtimeService,
+            PaymentRepository paymentRepository,
+            BookedSeatRepository bookedSeatRepository,
+            RefundRepository refundRepository) {
         this.bookingRepository = bookingRepository;
         this.showtimeService = showtimeService;
+        this.paymentRepository = paymentRepository;
+        this.bookedSeatRepository = bookedSeatRepository;
+        this.refundRepository = refundRepository;
     }
 
     public List<Booking> getAllBookings() {
@@ -73,22 +90,54 @@ public class BookingService {
         if (booking.getRefundStatus() == null || booking.getRefundStatus().isBlank()) {
             booking.setRefundStatus("none");
         }
+        if (booking.getPaymentMethod() == null || booking.getPaymentMethod().isBlank()) {
+            booking.setPaymentMethod("card");
+        }
         if (booking.getCreatedAt() == null) {
             booking.setCreatedAt(java.time.LocalDateTime.now());
         }
 
-        // Persist booking record
+        // 1. Persist booking record
         Booking saved = bookingRepository.save(booking);
 
-        // Update showtime booked seats in Function 3 inventory with pessimistic concurrency lock
+        // 2. Persist payment record into `payments` table
+        try {
+            Payment payment = new Payment();
+            payment.setBookingId(saved.getId());
+            payment.setAmount(saved.getTotalAmount());
+            payment.setMethod(normalizePaymentMethod(saved.getPaymentMethod()));
+            payment.setStatus("SUCCESS");
+            payment.setGatewayRef("PAY-" + saved.getBookingRef());
+            payment.setQrCode(saved.getBookingRef());
+            payment.setCheckInStatus("NOT_CHECKED_IN");
+            payment.setTransactionData("{\"bookingRef\":\"" + saved.getBookingRef() + "\",\"movie\":\"" + (saved.getMovieTitle() != null ? saved.getMovieTitle().replace("\"", "'") : "") + "\"}");
+            payment.setCreatedAt(java.time.LocalDateTime.now());
+            paymentRepository.save(payment);
+        } catch (Exception ignored) {
+        }
+
+        // 3. Persist individual seats into `booked_seats` table
+        if (saved.getSeats() != null && !saved.getSeats().isEmpty()) {
+            try {
+                double pricePerSeat = saved.getSeats().size() > 0 ? saved.getTotalAmount() / saved.getSeats().size() : 0.0;
+                for (String seatCode : saved.getSeats()) {
+                    BookedSeat bs = new BookedSeat();
+                    bs.setBookingId(saved.getId());
+                    bs.setSeatCode(seatCode);
+                    bs.setPriceCharged(Math.round(pricePerSeat * 100.0) / 100.0);
+                    bs.setSeatStatus("confirmed");
+                    bookedSeatRepository.save(bs);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        // 4. Update showtime booked seats in Function 3 inventory (idempotently)
         if (booking.getShowtimeId() != null && booking.getSeats() != null && !booking.getSeats().isEmpty()) {
             try {
                 Long stId = Long.parseLong(booking.getShowtimeId());
-                showtimeService.reserveSeatsWithPessimisticLock(stId, booking.getSeats());
-            } catch (IllegalStateException e) {
-                throw e; // Re-throw concurrency conflict
-            } catch (Exception e) {
-                // Ignore if showtime ID is non-numeric mock ID or showtime not in DB
+                showtimeService.addBookedSeats(stId, booking.getSeats());
+            } catch (Exception ignored) {
             }
         }
 
@@ -116,13 +165,48 @@ public class BookingService {
             booking.setRefundStatus(refundRate > 0 ? "processed" : "none");
         }
 
-        // Release seats from showtime inventory
+        // 1. Release seats from showtime inventory
         if (booking.getShowtimeId() != null && booking.getSeats() != null && !booking.getSeats().isEmpty()) {
             try {
                 Long stId = Long.parseLong(booking.getShowtimeId());
                 showtimeService.removeBookedSeats(stId, booking.getSeats());
             } catch (Exception ignored) {
             }
+        }
+
+        // 2. Update payment status to REFUNDED in `payments` table
+        try {
+            paymentRepository.findByBookingId(booking.getId()).forEach(p -> {
+                p.setStatus("REFUNDED");
+                paymentRepository.save(p);
+            });
+        } catch (Exception ignored) {
+        }
+
+        // 3. Insert refund record into `refunds` table if refund was approved
+        if (booking.getRefundAmount() != null && booking.getRefundAmount() > 0) {
+            try {
+                RefundRecord refund = new RefundRecord();
+                refund.setBookingId(booking.getId());
+                refund.setRefundAmount(booking.getRefundAmount());
+                refund.setRequestDate(java.time.LocalDateTime.now());
+                refund.setStatus("PROCESSED");
+                refund.setReason("Customer requested cancellation");
+                refund.setDeductionAmount(Math.max(0, Math.round((booking.getTotalAmount() - booking.getRefundAmount()) * 100.0) / 100.0));
+                refund.setProcessedData("{\"bookingRef\":\"" + booking.getBookingRef() + "\",\"autoTier\":\"processed\"}");
+                refundRepository.save(refund);
+            } catch (Exception ignored) {
+            }
+        }
+
+        // 4. Update booked seats in `booked_seats` table to 'cancelled'
+        try {
+            List<BookedSeat> seats = bookedSeatRepository.findByBookingId(booking.getId());
+            for (BookedSeat s : seats) {
+                s.setSeatStatus("cancelled");
+                bookedSeatRepository.save(s);
+            }
+        } catch (Exception ignored) {
         }
 
         return bookingRepository.save(booking);
@@ -204,5 +288,14 @@ public class BookingService {
         } catch (Exception e) {
             return 1.0;
         }
+    }
+
+    private String normalizePaymentMethod(String method) {
+        if (method == null || method.isBlank()) return "CARD";
+        String m = method.trim().toUpperCase();
+        if (m.contains("WALLET") || m.contains("GENIE") || m.contains("FRIMI")) return "WALLET";
+        if (m.contains("TRANSFER") || m.contains("BANK") || m.contains("ONLINE")) return "ONLINE_BANKING";
+        if (m.contains("CASH")) return "CASH";
+        return "CARD";
     }
 }

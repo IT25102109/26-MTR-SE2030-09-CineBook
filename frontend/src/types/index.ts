@@ -84,6 +84,8 @@ export interface Booking {
   refundStatus: 'none' | 'pending' | 'processed';
   refundAmount?: number;
   rescheduledFrom?: string;
+  paymentMethod?: string;
+  paymentStatus?: string;
   bookingDate: string;
 }
 
