@@ -734,7 +734,11 @@ export function saveUser(user: User): void {
       }
     }
 
-    users[idx] = user;
+    const previousPassword = users[idx].password;
+    users[idx] = { ...users[idx], ...user };
+    if (!user.password && previousPassword) {
+      users[idx].password = previousPassword;
+    }
     write(KEYS.users, users);
     emitStoreEvent(STORE_EVENTS.users);
     userApi.updateUser(user.id, user).catch(err =>
@@ -849,8 +853,8 @@ export async function registerUserInStore(req: RegisterRequest): Promise<User> {
     }
   } catch (err: any) {
     console.warn('Backend register call failed, continuing with client-side register:', err);
-    if (err.message && err.message.toLowerCase().includes('already exists')) {
-      throw err;
+    if (err.status === 400 || err.status === 409 || (err.message && (err.message.toLowerCase().includes('already exists') || err.message.toLowerCase().includes('otp') || err.message.toLowerCase().includes('verification')))) {
+      throw new Error(err.message || 'Registration failed');
     }
   }
 
@@ -896,8 +900,8 @@ export async function loginUserInStore(req: LoginRequest): Promise<User> {
     }
   } catch (err: any) {
     console.warn('Backend login call failed, trying client lookup:', err);
-    if (err.status === 401 || (err.message && err.message.toLowerCase().includes('invalid credentials'))) {
-      throw new Error('Invalid email or password');
+    if (err.status === 401 || err.status === 400 || (err.message && (err.message.toLowerCase().includes('password') || err.message.toLowerCase().includes('no account') || err.message.toLowerCase().includes('credentials') || err.message.toLowerCase().includes('incorrect')))) {
+      throw new Error(err.message || 'Invalid email or password');
     }
   }
 

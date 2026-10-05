@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import jakarta.mail.internet.MimeMessage;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,7 +32,11 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final Map<String, OtpEntry> otpStorage = new ConcurrentHashMap<>();
+    private final Map<String, Long> verifiedTargets = new ConcurrentHashMap<>();
     private final SecureRandom random = new SecureRandom();
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     @Autowired(required = false)
     private JavaMailSender mailSender;
@@ -208,23 +213,23 @@ public class AuthService {
             return false;
         }
 
-        String target = request.getTarget().trim().toLowerCase();
+        String target = request.getTarget().trim();
+        String targetKey = target.toLowerCase();
         String inputCode = request.getCode().trim();
 
         // Support standard demo code "123456" for automated testing
         if ("123456".equals(inputCode)) {
-            otpStorage.remove(target);
+            verifiedTargets.put(targetKey, System.currentTimeMillis() + 15 * 60 * 1000);
             return true;
         }
 
-        OtpEntry entry = otpStorage.get(target);
+        OtpEntry entry = otpStorage.get(targetKey);
         if (entry == null || entry.isExpired()) {
-            otpStorage.remove(target);
             return false;
         }
 
         if (entry.code.equals(inputCode)) {
-            otpStorage.remove(target);
+            verifiedTargets.put(targetKey, System.currentTimeMillis() + 15 * 60 * 1000);
             return true;
         }
 
@@ -249,22 +254,51 @@ public class AuthService {
 
         // If registered with Email, verify OTP
         if ("EMAIL".equals(provider)) {
-            String verificationTarget = request.getPhone() != null && !request.getPhone().isBlank()
-                    ? request.getPhone().trim().toLowerCase()
-                    : cleanEmail;
+            String cleanPhone = request.getPhone() != null ? request.getPhone().trim().toLowerCase() : "";
+            boolean isVerified = false;
 
-            if (request.getOtpCode() == null || request.getOtpCode().isBlank()) {
-                throw new IllegalArgumentException("OTP verification code is required.");
+            // 1. Check if email was pre-verified
+            Long emailVerifiedUntil = verifiedTargets.get(cleanEmail);
+            if (emailVerifiedUntil != null && emailVerifiedUntil > System.currentTimeMillis()) {
+                isVerified = true;
             }
 
-            boolean isValidOtp = verifyOtp(new VerifyOtpRequest(verificationTarget, request.getOtpCode()));
-            if (!isValidOtp) {
-                // Also check if OTP was keyed under email
-                isValidOtp = verifyOtp(new VerifyOtpRequest(cleanEmail, request.getOtpCode()));
+            // 2. Check if phone was pre-verified
+            if (!isVerified && !cleanPhone.isBlank()) {
+                Long phoneVerifiedUntil = verifiedTargets.get(cleanPhone);
+                if (phoneVerifiedUntil != null && phoneVerifiedUntil > System.currentTimeMillis()) {
+                    isVerified = true;
+                }
             }
 
-            if (!isValidOtp) {
-                throw new IllegalArgumentException("Invalid or expired OTP code. Please request a new code.");
+            // 3. Check directly against otpStorage or code
+            String code = request.getOtpCode() != null ? request.getOtpCode().trim() : "";
+            if (!isVerified && !code.isBlank()) {
+                if ("123456".equals(code)) {
+                    isVerified = true;
+                } else {
+                    OtpEntry emailEntry = otpStorage.get(cleanEmail);
+                    if (emailEntry != null && !emailEntry.isExpired() && emailEntry.code.equals(code)) {
+                        isVerified = true;
+                    } else if (!cleanPhone.isBlank()) {
+                        OtpEntry phoneEntry = otpStorage.get(cleanPhone);
+                        if (phoneEntry != null && !phoneEntry.isExpired() && phoneEntry.code.equals(code)) {
+                            isVerified = true;
+                        }
+                    }
+                }
+            }
+
+            if (!isVerified) {
+                throw new IllegalArgumentException("Verification code is required or has expired. Please verify your OTP code.");
+            }
+
+            // Clean up verified state
+            verifiedTargets.remove(cleanEmail);
+            otpStorage.remove(cleanEmail);
+            if (!cleanPhone.isBlank()) {
+                verifiedTargets.remove(cleanPhone);
+                otpStorage.remove(cleanPhone);
             }
 
             if (request.getPassword() == null || request.getPassword().length() < 6) {
@@ -275,12 +309,15 @@ public class AuthService {
         User newUser = new User();
         newUser.setFullName(request.getName().trim());
         newUser.setEmail(cleanEmail);
-        newUser.setPhone(request.getPhone() != null ? request.getPhone().trim() : null);
-        newUser.setPassword(request.getPassword() != null && !request.getPassword().isBlank()
+        newUser.setPhone(request.getPhone() != null && !request.getPhone().isBlank() ? request.getPhone().trim() : null);
+
+        String rawPassword = request.getPassword() != null && !request.getPassword().isBlank()
                 ? request.getPassword()
-                : "password123");
+                : "password123";
+        newUser.setPassword(passwordEncoder.encode(rawPassword));
+
         newUser.setRole(Role.CUSTOMER);
-        newUser.setLoyaltyPoints(100); // 100 bonus points on registration
+        newUser.setLoyaltyPoints(100); // 100 bonus loyalty points on registration
         newUser.setMembershipTier("Bronze");
         newUser.setAvatarColor("#F5C518");
 
@@ -312,7 +349,7 @@ public class AuthService {
                         ? request.getName().trim()
                         : (provider.equals("GOOGLE") ? "Google User" : "Microsoft User"));
                 newUser.setEmail(cleanEmail);
-                newUser.setPassword("oauth_authenticated");
+                newUser.setPassword(passwordEncoder.encode("oauth_authenticated"));
                 newUser.setRole(Role.CUSTOMER);
                 newUser.setLoyaltyPoints(100);
                 newUser.setMembershipTier("Bronze");
@@ -326,7 +363,7 @@ public class AuthService {
 
         // Email + Password login
         if (existingUser.isEmpty()) {
-            throw new IllegalArgumentException("No account found with email '" + cleanEmail + "'. Please register first.");
+            throw new IllegalArgumentException("No account found with email '" + cleanEmail + "'. Please check your email or register.");
         }
 
         User user = existingUser.get();
@@ -334,8 +371,21 @@ public class AuthService {
             throw new IllegalArgumentException("Password is required.");
         }
 
-        // Match password (accepts plain text or demo matches)
-        if (!request.getPassword().equals(user.getPassword()) && !"password123".equals(request.getPassword())) {
+        // Match password with PasswordEncoder (BCrypt) + fallback
+        boolean passwordMatches = false;
+        String userPassword = user.getPassword();
+        if (userPassword != null) {
+            if (userPassword.startsWith("$2a$") || userPassword.startsWith("$2b$") || userPassword.startsWith("$2y$")) {
+                passwordMatches = passwordEncoder.matches(request.getPassword(), userPassword);
+            } else {
+                passwordMatches = request.getPassword().equals(userPassword);
+            }
+        }
+        if (!passwordMatches && "password123".equals(request.getPassword())) {
+            passwordMatches = true;
+        }
+
+        if (!passwordMatches) {
             throw new IllegalArgumentException("Incorrect password. Please try again.");
         }
 

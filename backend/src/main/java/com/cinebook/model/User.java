@@ -17,6 +17,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
 public class User {
 
     @Id
@@ -70,6 +71,26 @@ public class User {
     private String password = "password123";
 
     private String phone;
+
+    @com.fasterxml.jackson.annotation.JsonProperty("phoneNumber")
+    public String getPhoneNumber() {
+        return phone;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonProperty("phoneNumber")
+    public void setPhoneNumber(String phoneNumber) {
+        if (phoneNumber != null) {
+            this.phone = phoneNumber;
+        }
+    }
+
+    @Transient
+    @com.fasterxml.jackson.annotation.JsonProperty("authProvider")
+    private String authProvider;
+
+    @Transient
+    @com.fasterxml.jackson.annotation.JsonProperty("isVerified")
+    private Boolean isVerified;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

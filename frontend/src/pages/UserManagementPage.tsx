@@ -190,7 +190,7 @@ export function UserManagementPage() {
       assignedBranchId: formData.role === 'cinemaManager' ? formData.assignedBranchId : undefined,
       avatarColor: formData.avatarColor,
       isVerified: true,
-      password: formData.password || editing?.password || 'password123',
+      password: formData.password ? formData.password : (editing ? editing.password : 'password123'),
     };
 
     try {

@@ -39,21 +39,39 @@ export const authApi = {
   async sendOtp(req: SendOtpRequest): Promise<OtpResponse> {
     return apiClient<OtpResponse>('/auth/send-otp', {
       method: 'POST',
-      body: JSON.stringify(req),
+      body: JSON.stringify({
+        target: req.target,
+        type: req.type ? req.type.toUpperCase() : 'EMAIL',
+      }),
     });
   },
 
   async verifyOtp(req: VerifyOtpRequest): Promise<OtpResponse> {
-    return apiClient<OtpResponse>('/auth/verify-otp', {
+    const res = await apiClient<any>('/auth/verify-otp', {
       method: 'POST',
-      body: JSON.stringify(req),
+      body: JSON.stringify({
+        target: req.target,
+        code: req.code,
+      }),
     });
+    return {
+      success: res.success ?? res.valid ?? true,
+      message: res.message || 'OTP verified successfully.',
+    };
   },
 
   async register(req: RegisterRequest): Promise<AuthResponse> {
+    const providerStr = (req.authProvider || 'email').toUpperCase();
+    const payload = {
+      ...req,
+      provider: providerStr,
+      authProvider: providerStr,
+      otpCode: req.verificationCode,
+      verificationCode: req.verificationCode,
+    };
     const res = await apiClient<any>('/auth/register', {
       method: 'POST',
-      body: JSON.stringify(req),
+      body: JSON.stringify(payload),
     });
     if (res.token) {
       localStorage.setItem('cinebook_auth_token', res.token);
@@ -66,9 +84,15 @@ export const authApi = {
   },
 
   async login(req: LoginRequest): Promise<AuthResponse> {
+    const providerStr = (req.authProvider || 'email').toUpperCase();
+    const payload = {
+      ...req,
+      provider: providerStr,
+      authProvider: providerStr,
+    };
     const res = await apiClient<any>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify(req),
+      body: JSON.stringify(payload),
     });
     if (res.token) {
       localStorage.setItem('cinebook_auth_token', res.token);

@@ -34,9 +34,9 @@ public class AuthController {
     public ResponseEntity<?> verifyOtp(@RequestBody VerifyOtpRequest request) {
         boolean valid = authService.verifyOtp(request);
         if (valid) {
-            return ResponseEntity.ok(Map.of("valid", true, "message", "OTP verified successfully."));
+            return ResponseEntity.ok(Map.of("success", true, "valid", true, "message", "OTP verified successfully."));
         } else {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("valid", false, "message", "Invalid or expired OTP code."));
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("success", false, "valid", false, "message", "Invalid or expired OTP code."));
         }
     }
 
@@ -46,7 +46,7 @@ public class AuthController {
             AuthResponse response = authService.register(request);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("success", false, "message", e.getMessage()));
         }
     }
 
@@ -56,7 +56,7 @@ public class AuthController {
             AuthResponse response = authService.login(request);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("success", false, "message", e.getMessage()));
         }
     }
 }

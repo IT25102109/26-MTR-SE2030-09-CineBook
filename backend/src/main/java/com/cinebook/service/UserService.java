@@ -4,6 +4,7 @@ import com.cinebook.model.Role;
 import com.cinebook.model.User;
 import com.cinebook.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,10 +14,12 @@ import java.util.List;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Autowired
-    public UserService(UserRepository userRepository) {
+    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public List<User> getAllUsers() {
@@ -49,9 +52,16 @@ public class UserService {
             }
         }
 
-        if (user.getPassword() == null || user.getPassword().isBlank()) {
-            user.setPassword("password123");
+        String rawPassword = (user.getPassword() == null || user.getPassword().isBlank())
+                ? "password123"
+                : user.getPassword();
+
+        if (!rawPassword.startsWith("$2a$") && !rawPassword.startsWith("$2b$") && !rawPassword.startsWith("$2y$")) {
+            user.setPassword(passwordEncoder.encode(rawPassword));
+        } else {
+            user.setPassword(rawPassword);
         }
+
         if (user.getLoyaltyPoints() == null) {
             user.setLoyaltyPoints(0);
         }
@@ -105,7 +115,12 @@ public class UserService {
         if (userDetails.getAvatarColor() != null) user.setAvatarColor(userDetails.getAvatarColor());
         if (userDetails.getPhone() != null) user.setPhone(userDetails.getPhone());
         if (userDetails.getPassword() != null && !userDetails.getPassword().isBlank()) {
-            user.setPassword(userDetails.getPassword());
+            String rawPassword = userDetails.getPassword();
+            if (!rawPassword.startsWith("$2a$") && !rawPassword.startsWith("$2b$") && !rawPassword.startsWith("$2y$")) {
+                user.setPassword(passwordEncoder.encode(rawPassword));
+            } else {
+                user.setPassword(rawPassword);
+            }
         }
         return userRepository.save(user);
     }
