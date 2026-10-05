@@ -293,7 +293,7 @@ export const mockAdminUsers: User[] = [
   { id: '5', name: 'Morgan Freeman', email: 'morgan@cinebook.com', role: 'customer', avatarColor: '#F97316', loyaltyPoints: 860, loyaltyTier: 'Gold' },
   { id: '6', name: 'Casey Nguyen', email: 'casey@cinebook.com', role: 'cinemaManager', avatarColor: '#8B5CF6', assignedBranchId: '2' },
   { id: '7', name: 'Riley Patel', email: 'riley@cinebook.com', role: 'customer', avatarColor: '#EC4899', loyaltyPoints: 120, loyaltyTier: 'Bronze' },
-  { id: '8', name: 'Jamie Chen', email: 'jamie@cinebook.com', role: 'admin', avatarColor: '#06B6D4' },
+  { id: '8', name: 'Jamie Chen', email: 'jamie@cinebook.com', role: 'cinemaManager', avatarColor: '#06B6D4', assignedBranchId: '3' },
 ];
 
 export const mockNotifications: Notification[] = [

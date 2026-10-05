@@ -1,5 +1,5 @@
 import { mockMovies, mockBranches, mockShowtimes, mockBookings, mockUsers, mockAdminUsers, mockNotifications, mockNotificationTemplates, mockMovieReviews, mockPromotions } from '@/data/mockData';
-import type { Movie, Branch, Showtime, Booking, User, Role, Notification, NotificationTemplate, NotificationPreferences, MovieReview, Promotion, MovieRecommendation, LoyaltyVoucher } from '@/types';
+import type { Movie, Branch, Showtime, Booking, User, Role, Notification, NotificationTemplate, NotificationPreferences, MovieReview, Promotion, MovieRecommendation, LoyaltyVoucher, SendOtpRequest, VerifyOtpRequest, OtpResponse, RegisterRequest, LoginRequest } from '@/types';
 import { movieApi } from '@/api/movieApi';
 import { branchApi } from '@/api/branchApi';
 import { showtimeApi } from '@/api/showtimeApi';
@@ -11,6 +11,7 @@ import { notificationApi } from '@/api/notificationApi';
 import { wishlistApi } from '@/api/wishlistApi';
 import { loyaltyVoucherApi } from '@/api/loyaltyVoucherApi';
 import { waitlistApi } from '@/api/waitlistApi';
+import { authApi } from '@/api/authApi';
 
 const KEYS = {
   movies: 'cinebook_movies',
@@ -83,6 +84,27 @@ export function seedData(): void {
   }
   if (!localStorage.getItem(KEYS.users)) {
     localStorage.setItem(KEYS.users, JSON.stringify(mockAdminUsers));
+  } else {
+    // If cached users exist, ensure single admin rule is upheld (demote Jamie Chen to cinemaManager if needed)
+    try {
+      const storedUsers: User[] = JSON.parse(localStorage.getItem(KEYS.users) || '[]');
+      const admins = storedUsers.filter(u => u.role === 'admin');
+      if (admins.length > 1) {
+        let changed = false;
+        storedUsers.forEach(u => {
+          if (u.email?.toLowerCase() === 'jamie@cinebook.com' && u.role === 'admin') {
+            u.role = 'cinemaManager';
+            u.assignedBranchId = '3';
+            changed = true;
+          }
+        });
+        if (changed) {
+          localStorage.setItem(KEYS.users, JSON.stringify(storedUsers));
+        }
+      }
+    } catch {
+      // ignore
+    }
   }
   const existingNotifications = localStorage.getItem(KEYS.notifications);
   if (!existingNotifications || JSON.parse(existingNotifications || '[]').length === 0) {
@@ -693,8 +715,25 @@ export function getUsers(): User[] {
 
 export function saveUser(user: User): void {
   const users = getUsers();
+
+  // Enforce Single Admin constraint
+  if (user.role === 'admin') {
+    const existingAdmin = users.find(u => u.role === 'admin' && u.id !== user.id);
+    if (existingAdmin) {
+      throw new Error(`Only 1 Admin is allowed in the system. An admin account already exists (${existingAdmin.name}).`);
+    }
+  }
+
   const idx = users.findIndex(u => u.id === user.id);
   if (idx >= 0) {
+    // If attempting to demote the sole admin
+    if (users[idx].role === 'admin' && user.role !== 'admin') {
+      const otherAdmins = users.filter(u => u.role === 'admin' && u.id !== user.id);
+      if (otherAdmins.length === 0) {
+        throw new Error('Cannot change the role of the primary Admin. The system must have exactly one Admin.');
+      }
+    }
+
     users[idx] = user;
     write(KEYS.users, users);
     emitStoreEvent(STORE_EVENTS.users);
@@ -721,7 +760,12 @@ export function saveUser(user: User): void {
 }
 
 export function deleteUser(id: string): void {
-  write(KEYS.users, getUsers().filter(u => u.id !== id));
+  const users = getUsers();
+  const target = users.find(u => u.id === id);
+  if (target?.role === 'admin') {
+    throw new Error('The primary Admin account cannot be deleted.');
+  }
+  write(KEYS.users, users.filter(u => u.id !== id));
   emitStoreEvent(STORE_EVENTS.users);
   userApi.deleteUser(id).catch(err =>
     console.warn('API deleteUser sync failed, deletion kept locally:', err)
@@ -749,6 +793,7 @@ export function setCurrentUser(user: User | null): void {
     localStorage.setItem(KEYS.currentUser, JSON.stringify(user));
   } else {
     localStorage.removeItem(KEYS.currentUser);
+    localStorage.removeItem('cinebook_auth_token');
   }
 }
 
@@ -757,6 +802,133 @@ export function loginAsRole(role: Role): User {
   const user = allUsers.find(u => u.role === role) || mockUsers.find(u => u.role === role)!;
   setCurrentUser(user);
   return user;
+}
+
+export async function sendOtpInStore(req: SendOtpRequest): Promise<OtpResponse> {
+  try {
+    return await authApi.sendOtp(req);
+  } catch (err) {
+    console.warn('Backend sendOtp unavailable, using client fallback:', err);
+    const demoCode = String(Math.floor(100000 + Math.random() * 900000));
+    return {
+      success: true,
+      message: `Verification code sent to ${req.target}`,
+      demoCode,
+    };
+  }
+}
+
+export async function verifyOtpInStore(req: VerifyOtpRequest): Promise<boolean> {
+  try {
+    const res = await authApi.verifyOtp(req);
+    return res.success;
+  } catch (err) {
+    console.warn('Backend verifyOtp unavailable, using client fallback:', err);
+    return req.code.length === 6;
+  }
+}
+
+export async function registerUserInStore(req: RegisterRequest): Promise<User> {
+  const users = getUsers();
+  const existing = users.find(u => u.email.toLowerCase() === req.email.trim().toLowerCase());
+  if (existing) {
+    throw new Error(`Email ${req.email} is already registered.`);
+  }
+
+  try {
+    const authRes = await authApi.register(req);
+    if (authRes.user) {
+      const curUsers = getUsers();
+      if (!curUsers.some(u => u.id === authRes.user.id)) {
+        curUsers.push(authRes.user);
+        write(KEYS.users, curUsers);
+        emitStoreEvent(STORE_EVENTS.users);
+      }
+      setCurrentUser(authRes.user);
+      return authRes.user;
+    }
+  } catch (err: any) {
+    console.warn('Backend register call failed, continuing with client-side register:', err);
+    if (err.message && err.message.toLowerCase().includes('already exists')) {
+      throw err;
+    }
+  }
+
+  // Client fallback
+  const newUser: User = {
+    id: `u_${Date.now()}`,
+    name: req.name.trim(),
+    email: req.email.trim(),
+    role: 'customer',
+    avatarColor: ['#F5C518', '#E50914', '#3B82F6', '#10B981', '#F97316', '#8B5CF6', '#EC4899', '#06B6D4'][Math.floor(Math.random() * 8)],
+    phone: req.phone,
+    authProvider: req.authProvider,
+    isVerified: true,
+    loyaltyPoints: 100, // 100 bonus loyalty points upon registration
+    loyaltyTier: 'Bronze',
+  };
+
+  const curUsers = getUsers();
+  curUsers.push(newUser);
+  write(KEYS.users, curUsers);
+  emitStoreEvent(STORE_EVENTS.users);
+  setCurrentUser(newUser);
+
+  userApi.createUser(newUser).catch(e => console.warn('createUser sync failed:', e));
+  return newUser;
+}
+
+export async function loginUserInStore(req: LoginRequest): Promise<User> {
+  try {
+    const authRes = await authApi.login(req);
+    if (authRes.user) {
+      const curUsers = getUsers();
+      const existingIdx = curUsers.findIndex(u => u.email.toLowerCase() === authRes.user.email.toLowerCase());
+      if (existingIdx >= 0) {
+        curUsers[existingIdx] = { ...curUsers[existingIdx], ...authRes.user };
+      } else {
+        curUsers.push(authRes.user);
+      }
+      write(KEYS.users, curUsers);
+      emitStoreEvent(STORE_EVENTS.users);
+      setCurrentUser(authRes.user);
+      return authRes.user;
+    }
+  } catch (err: any) {
+    console.warn('Backend login call failed, trying client lookup:', err);
+    if (err.status === 401 || (err.message && err.message.toLowerCase().includes('invalid credentials'))) {
+      throw new Error('Invalid email or password');
+    }
+  }
+
+  const users = getUsers();
+  const existing = users.find(u => u.email.toLowerCase() === req.email.trim().toLowerCase());
+
+  if (existing) {
+    setCurrentUser(existing);
+    return existing;
+  }
+
+  if (req.authProvider === 'google' || req.authProvider === 'microsoft') {
+    const newUser: User = {
+      id: `u_${Date.now()}`,
+      name: req.name || req.email.split('@')[0],
+      email: req.email.trim(),
+      role: 'customer',
+      avatarColor: '#3B82F6',
+      authProvider: req.authProvider,
+      isVerified: true,
+      loyaltyPoints: 100,
+      loyaltyTier: 'Bronze',
+    };
+    users.push(newUser);
+    write(KEYS.users, users);
+    emitStoreEvent(STORE_EVENTS.users);
+    setCurrentUser(newUser);
+    return newUser;
+  }
+
+  throw new Error('Account not found with this email. Please check your credentials or register.');
 }
 
 export function getHall(branchId: string, hallId: string) {

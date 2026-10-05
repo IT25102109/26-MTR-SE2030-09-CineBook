@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import type { Role } from '@/types';
 import { Button } from '@/components/ui/Button';
-import { Modal } from '@/components/ui/Modal';
+import { AuthModal } from '@/components/auth/AuthModal';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
@@ -215,30 +215,7 @@ export function Navbar() {
         )}
       </header>
 
-      <Modal open={loginOpen} onClose={() => setLoginOpen(false)} title="Choose a role to sign in" size="sm">
-        <p className="text-sm text-text-secondary mb-5">
-          This is a demo — pick a role to explore the platform from that perspective.
-        </p>
-        <div className="space-y-3">
-          {(['customer', 'cinemaManager', 'admin'] as Role[]).map(role => (
-            <button
-              key={role}
-              onClick={() => handleLogin(role)}
-              className="w-full flex items-center justify-between p-4 rounded-xl bg-cinema-elevated hover:bg-cinema-border border border-cinema-border hover:border-accent-primary/30 transition-all group"
-            >
-              <div className="text-left">
-                <p className="font-medium">{roleLabels[role]}</p>
-                <p className="text-xs text-text-muted mt-0.5">
-                  {role === 'customer' && 'Browse, book, and manage tickets'}
-                  {role === 'cinemaManager' && 'Manage movies, showtimes & halls'}
-                  {role === 'admin' && 'Full access — analytics, branches & users'}
-                </p>
-              </div>
-              <ChevronDown className="w-5 h-5 text-text-muted group-hover:text-accent-primary -rotate-90 transition-all" />
-            </button>
-          ))}
-        </div>
-      </Modal>
+      <AuthModal open={loginOpen} onClose={() => setLoginOpen(false)} />
     </>
   );
 }

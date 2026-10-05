@@ -587,7 +587,7 @@ INSERT INTO `users` (`id`, `full_name`, `first_name`, `last_name`, `email`, `pas
 (5, 'Morgan Freeman', 'Morgan', 'Freeman', 'morgan@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-312-555-0195', 'CUSTOMER', '2026-09-17 06:00:13', NULL, 860, 'Gold', NULL, NULL, '#F97316'),
 (6, 'Casey Nguyen', 'Casey', 'Nguyen', 'casey@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-310-555-0194', 'CINEMA_MANAGER', '2026-09-17 06:00:13', 2, 0, 'Bronze', 'EMP-002', NULL, '#8B5CF6'),
 (7, 'Riley Patel', 'Riley', 'Patel', 'riley@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-312-555-0193', 'CUSTOMER', '2026-09-17 06:00:13', NULL, 120, 'Bronze', NULL, NULL, '#EC4899'),
-(8, 'Jamie Chen', 'Jamie', 'Chen', 'jamie@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-212-555-0192', 'ADMIN', '2026-09-17 06:00:13', NULL, 0, 'Bronze', NULL, 'BRANCH_AUDITOR', '#06B6D4');
+(8, 'Jamie Chen', 'Jamie', 'Chen', 'jamie@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-212-555-0192', 'CINEMA_MANAGER', '2026-09-17 06:00:13', 3, 0, 'Bronze', 'EMP-003', NULL, '#06B6D4');
 
 -- --------------------------------------------------------
 

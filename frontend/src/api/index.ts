@@ -11,4 +11,5 @@ export * from './notificationApi';
 export * from './wishlistApi';
 export * from './loyaltyVoucherApi';
 export * from './waitlistApi';
+export * from './authApi';
 

@@ -6,6 +6,10 @@ export interface User {
   email: string;
   role: Role;
   avatarColor: string;
+  phone?: string;
+  password?: string;
+  authProvider?: 'email' | 'google' | 'microsoft';
+  isVerified?: boolean;
   assignedBranchId?: string; // Cinema Manager Branch Scoping (Member 2)
   loyaltyPoints?: number;     // Customer Loyalty Points (Member 6)
   loyaltyTier?: 'Bronze' | 'Silver' | 'Gold' | 'Platinum'; // Loyalty Tier (Member 6)
@@ -175,4 +179,43 @@ export interface Promotion {
   validUntil: string;
   active: boolean;
 }
+
+export interface SendOtpRequest {
+  target: string;
+  type: 'email' | 'phone';
+}
+
+export interface VerifyOtpRequest {
+  target: string;
+  code: string;
+}
+
+export interface OtpResponse {
+  success: boolean;
+  message: string;
+  demoCode?: string;
+}
+
+export interface RegisterRequest {
+  name: string;
+  email: string;
+  phone?: string;
+  password?: string;
+  authProvider: 'email' | 'google' | 'microsoft';
+  verificationCode?: string;
+}
+
+export interface LoginRequest {
+  email: string;
+  password?: string;
+  authProvider?: 'email' | 'google' | 'microsoft';
+  name?: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: User;
+  message?: string;
+}
+
 

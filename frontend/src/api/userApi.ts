@@ -20,6 +20,9 @@ function normalizeUser(raw: any): User {
     assignedBranchId: raw.branchId ? String(raw.branchId) : raw.assignedBranchId,
     loyaltyPoints: typeof raw.loyaltyPoints === 'number' ? raw.loyaltyPoints : 0,
     loyaltyTier: raw.membershipTier ?? raw.loyaltyTier ?? 'Bronze',
+    phone: raw.phoneNumber ?? raw.phone,
+    authProvider: raw.authProvider ? raw.authProvider.toLowerCase() : undefined,
+    isVerified: raw.isVerified ?? true,
   };
 }
 
@@ -40,7 +43,10 @@ export const userApi = {
       email: user.email,
       role: user.role === 'admin' ? 'ADMIN' : user.role === 'cinemaManager' ? 'CINEMA_MANAGER' : 'CUSTOMER',
       branchId: user.assignedBranchId ? Number(user.assignedBranchId) : null,
-      password: 'password123',
+      password: (user as any).password || 'password123',
+      phoneNumber: user.phone,
+      authProvider: user.authProvider ? user.authProvider.toUpperCase() : 'EMAIL',
+      isVerified: user.isVerified ?? true,
       loyaltyPoints: user.loyaltyPoints ?? 0,
       membershipTier: user.loyaltyTier ?? 'Bronze',
       avatarColor: user.avatarColor ?? '#F5C518',

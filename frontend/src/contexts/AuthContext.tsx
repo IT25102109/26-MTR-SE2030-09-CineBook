@@ -1,10 +1,24 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import type { User, Role } from '@/types';
-import { getCurrentUser, setCurrentUser, loginAsRole } from '@/data/store';
+import type { User, Role, SendOtpRequest, VerifyOtpRequest, OtpResponse, RegisterRequest, LoginRequest } from '@/types';
+import {
+  getCurrentUser,
+  setCurrentUser,
+  loginAsRole,
+  sendOtpInStore,
+  verifyOtpInStore,
+  registerUserInStore,
+  loginUserInStore,
+  STORE_EVENTS,
+} from '@/data/store';
 
 interface AuthContextType {
   user: User | null;
   login: (role: Role) => void;
+  loginWithEmail: (email: string, password?: string) => Promise<User>;
+  loginWithSocial: (provider: 'google' | 'microsoft', email: string, name?: string) => Promise<User>;
+  sendOtp: (target: string, type: 'email' | 'phone') => Promise<OtpResponse>;
+  verifyOtp: (target: string, code: string) => Promise<boolean>;
+  registerUser: (req: RegisterRequest) => Promise<User>;
   logout: () => void;
   hasRole: (...roles: Role[]) => boolean;
 }
@@ -14,13 +28,53 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
 
-  useEffect(() => {
+  const refreshUser = () => {
     setUser(getCurrentUser());
+  };
+
+  useEffect(() => {
+    refreshUser();
+
+    const handleUpdate = () => refreshUser();
+    window.addEventListener(STORE_EVENTS.users, handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener(STORE_EVENTS.users, handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
   }, []);
 
   const login = (role: Role) => {
     const u = loginAsRole(role);
     setUser(u);
+  };
+
+  const loginWithEmail = async (email: string, password?: string): Promise<User> => {
+    const req: LoginRequest = { email, password, authProvider: 'email' };
+    const loggedIn = await loginUserInStore(req);
+    setUser(loggedIn);
+    return loggedIn;
+  };
+
+  const loginWithSocial = async (provider: 'google' | 'microsoft', email: string, name?: string): Promise<User> => {
+    const req: LoginRequest = { email, authProvider: provider, name };
+    const loggedIn = await loginUserInStore(req);
+    setUser(loggedIn);
+    return loggedIn;
+  };
+
+  const sendOtp = async (target: string, type: 'email' | 'phone'): Promise<OtpResponse> => {
+    return await sendOtpInStore({ target, type });
+  };
+
+  const verifyOtp = async (target: string, code: string): Promise<boolean> => {
+    return await verifyOtpInStore({ target, code });
+  };
+
+  const registerUser = async (req: RegisterRequest): Promise<User> => {
+    const created = await registerUserInStore(req);
+    setUser(created);
+    return created;
   };
 
   const logout = () => {
@@ -34,7 +88,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, hasRole }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        login,
+        loginWithEmail,
+        loginWithSocial,
+        sendOtp,
+        verifyOtp,
+        registerUser,
+        logout,
+        hasRole,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
