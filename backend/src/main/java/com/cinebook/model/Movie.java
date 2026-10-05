@@ -19,6 +19,7 @@ import java.util.List;
  */
 @Entity
 @Table(name = "movies")
+@IdClass(MovieId.class)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -53,6 +54,7 @@ public class Movie {
         }
     }
 
+    @Id
     @Column(nullable = false)
     private String title;
 

@@ -10,3 +10,4 @@ import java.util.List;
 public interface RefundRepository extends JpaRepository<RefundRecord, Long> {
     List<RefundRecord> findByBookingId(Long bookingId);
 }
+

@@ -9,9 +9,7 @@ import java.util.List;
 
 /**
  * REST endpoints for movie management.
- * This is the reference implementation of the controller → service → repository
- * pattern — copy this structure for the other 5 modules (showtime, booking,
- * seat selection, payment, admin reporting, etc.).
+ * Supports standard ID-based and composite key (id + title) lookups.
  */
 @RestController
 @RequestMapping("/api/movies")
@@ -32,6 +30,16 @@ public class MovieController {
     @GetMapping("/{id}")
     public Movie getMovieById(@PathVariable Long id) {
         return movieService.getMovieById(id);
+    }
+
+    @GetMapping("/title/{title}")
+    public Movie getMovieByTitle(@PathVariable String title) {
+        return movieService.getMovieByTitle(title);
+    }
+
+    @GetMapping("/{id}/title/{title}")
+    public Movie getMovieByIdAndTitle(@PathVariable Long id, @PathVariable String title) {
+        return movieService.getMovieByIdAndTitle(id, title);
     }
 
     @PostMapping

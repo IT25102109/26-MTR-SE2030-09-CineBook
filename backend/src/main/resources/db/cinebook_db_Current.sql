@@ -690,7 +690,9 @@ ALTER TABLE `loyalty_vouchers`
 -- Indexes for table `movies`
 --
 ALTER TABLE `movies`
-  ADD PRIMARY KEY (`id`);
+  ADD PRIMARY KEY (`id`,`title`),
+  ADD KEY `idx_movies_id` (`id`),
+  ADD KEY `idx_movies_title` (`title`);
 
 --
 -- Indexes for table `movie_genres`
