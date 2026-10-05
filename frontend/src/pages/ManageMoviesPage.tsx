@@ -33,6 +33,26 @@ export const AVAILABLE_GENRES = [
   'Western',
 ];
 
+export const AVAILABLE_LANGUAGES = [
+  'English',
+  'Sinhala',
+  'Tamil',
+  'Hindi',
+  'Telugu',
+  'Malayalam',
+  'Kannada',
+  'Bengali',
+  'Japanese',
+  'Korean',
+  'French',
+  'Spanish',
+  'German',
+  'Italian',
+  'Chinese',
+  'Arabic',
+  'Russian',
+];
+
 const emptyMovie: Omit<Movie, 'id'> = {
   title: '',
   synopsis: '',
@@ -494,7 +514,20 @@ export function ManageMoviesPage() {
           <Input label="Cast (comma-separated)" value={castInput} onChange={e => setCastInput(e.target.value)} placeholder="Actor 1, Actor 2" />
           <div className="grid grid-cols-2 gap-4">
             <Input label="Director" value={formData.director} onChange={e => setFormData({ ...formData, director: e.target.value })} placeholder="Director name" />
-            <Input label="Language" value={formData.language} onChange={e => setFormData({ ...formData, language: e.target.value })} placeholder="English" />
+            <Select
+              label="Language"
+              value={formData.language || 'English'}
+              onChange={e => setFormData({ ...formData, language: e.target.value })}
+            >
+              {formData.language && !AVAILABLE_LANGUAGES.includes(formData.language) && (
+                <option value={formData.language}>{formData.language}</option>
+              )}
+              {AVAILABLE_LANGUAGES.map(lang => (
+                <option key={lang} value={lang}>
+                  {lang}
+                </option>
+              ))}
+            </Select>
           </div>
           <div className="grid grid-cols-3 gap-4">
             <Input label="Duration (min)" type="number" value={formData.duration} onChange={e => setFormData({ ...formData, duration: parseInt(e.target.value) || 0 })} />
