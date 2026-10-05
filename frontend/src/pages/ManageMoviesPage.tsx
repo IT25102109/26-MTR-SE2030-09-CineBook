@@ -53,6 +53,8 @@ export const AVAILABLE_LANGUAGES = [
   'Russian',
 ];
 
+export const AVAILABLE_CERTIFICATIONS = ['G', 'PG', 'PG-13', 'R', 'NC-17'];
+
 const emptyMovie: Omit<Movie, 'id'> = {
   title: '',
   synopsis: '',
@@ -256,13 +258,13 @@ export function ManageMoviesPage() {
       <Card className="p-4 mb-6">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
             <input
               type="text"
               placeholder="Search by title..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full bg-cinema-base border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-accent-primary/50 transition-all"
+              className="w-full bg-cinema-base border border-cinema-border rounded-xl pl-10 pr-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/20 transition-all"
             />
           </div>
           <Select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
@@ -448,7 +450,7 @@ export function ManageMoviesPage() {
               </Select>
 
               {/* Custom Genre Adder */}
-              <div className="flex gap-1.5">
+              <div className="flex gap-2 items-center">
                 <input
                   type="text"
                   placeholder="Or custom genre..."
@@ -464,7 +466,7 @@ export function ManageMoviesPage() {
                       }
                     }
                   }}
-                  className="flex-1 bg-cinema-elevated border border-white/10 rounded-xl px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-accent-primary/50"
+                  className="flex-1 bg-cinema-base border border-cinema-border rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/20 transition-all"
                 />
                 <Button
                   type="button"
@@ -477,7 +479,7 @@ export function ManageMoviesPage() {
                       setCustomGenreInput('');
                     }
                   }}
-                  className="text-xs px-2.5"
+                  className="text-sm px-4 h-[42px] border-cinema-border flex-shrink-0"
                 >
                   + Add
                 </Button>
@@ -532,7 +534,20 @@ export function ManageMoviesPage() {
           <div className="grid grid-cols-3 gap-4">
             <Input label="Duration (min)" type="number" value={formData.duration} onChange={e => setFormData({ ...formData, duration: parseInt(e.target.value) || 0 })} />
             <Input label="Rating (0-10)" type="number" step="0.1" value={formData.rating} onChange={e => setFormData({ ...formData, rating: parseFloat(e.target.value) || 0 })} />
-            <Input label="Certification" value={formData.certification} onChange={e => setFormData({ ...formData, certification: e.target.value })} placeholder="PG-13" />
+            <Select
+              label="Certification"
+              value={formData.certification || 'PG-13'}
+              onChange={e => setFormData({ ...formData, certification: e.target.value })}
+            >
+              {formData.certification && !AVAILABLE_CERTIFICATIONS.includes(formData.certification) && (
+                <option value={formData.certification}>{formData.certification}</option>
+              )}
+              {AVAILABLE_CERTIFICATIONS.map(c => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </Select>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Select label="Status" value={formData.status} onChange={e => setFormData({ ...formData, status: e.target.value as Movie['status'] })}>
