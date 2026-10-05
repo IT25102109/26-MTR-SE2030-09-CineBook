@@ -205,8 +205,15 @@ export function getMovie(id: string): Movie | undefined {
 
 export function saveMovie(movie: Movie): void {
   const movies = getMovies();
+  const normalizedTitle = (movie.title || '').trim().toLowerCase();
   const idx = movies.findIndex(m => m.id === movie.id);
   if (idx >= 0) {
+    const isDuplicate = movies.some(
+      m => m.id !== movie.id && (m.title || '').trim().toLowerCase() === normalizedTitle
+    );
+    if (isDuplicate) {
+      throw new Error(`A movie with title "${movie.title.trim()}" already exists!`);
+    }
     movies[idx] = movie;
     write(KEYS.movies, movies);
     emitStoreEvent(STORE_EVENTS.movies);
@@ -214,6 +221,12 @@ export function saveMovie(movie: Movie): void {
       console.warn('API updateMovie sync failed, changes kept locally:', err)
     );
   } else {
+    const isDuplicate = movies.some(
+      m => (m.title || '').trim().toLowerCase() === normalizedTitle
+    );
+    if (isDuplicate) {
+      throw new Error(`A movie with title "${movie.title.trim()}" already exists!`);
+    }
     const localId = movie.id || `m${Date.now()}`;
     const toSave = { ...movie, id: localId };
     movies.unshift(toSave);

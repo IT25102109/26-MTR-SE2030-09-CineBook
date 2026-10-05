@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Plus, Search, Edit2, Trash2, Film, MessageSquare, CheckCircle, XCircle, Star, X, Play } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Film, MessageSquare, CheckCircle, XCircle, Star, X, Play, AlertCircle } from 'lucide-react';
 import { getMovies, saveMovie, deleteMovie, getAllReviewsForModeration, updateReviewStatus, deleteReview, STORE_EVENTS } from '@/data/store';
 import { useStoreSync } from '@/hooks/useStoreSync';
 import { movieApi } from '@/api/movieApi';
@@ -69,6 +69,7 @@ export function ManageMoviesPage() {
   const [customGenreInput, setCustomGenreInput] = useState('');
   const [castInput, setCastInput] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Movie | null>(null);
+  const [formError, setFormError] = useState('');
 
   const [reviewsModalOpen, setReviewsModalOpen] = useState(false);
   const [reviewTick, setReviewTick] = useState(0);
@@ -120,6 +121,7 @@ export function ManageMoviesPage() {
     setSelectedGenres(['Action']);
     setCustomGenreInput('');
     setCastInput('');
+    setFormError('');
     setModalOpen(true);
   };
 
@@ -129,20 +131,39 @@ export function ManageMoviesPage() {
     setSelectedGenres(movie.genre && movie.genre.length > 0 ? [...movie.genre] : ['Action']);
     setCustomGenreInput('');
     setCastInput(movie.cast.join(', '));
+    setFormError('');
     setModalOpen(true);
   };
 
   const handleSave = async () => {
-    if (!formData.title.trim()) {
+    const cleanTitle = formData.title.trim();
+    if (!cleanTitle) {
+      setFormError('Movie title is required');
       toast('error', 'Movie title is required');
       return;
     }
     if (!formData.poster.trim()) {
+      setFormError('Poster URL is required');
       toast('error', 'Poster URL is required');
       return;
     }
     if (selectedGenres.length === 0) {
+      setFormError('Please select at least one genre from the dropdown');
       toast('error', 'Please select at least one genre from the dropdown');
+      return;
+    }
+
+    // Check if another movie with this exact title already exists (case-insensitive)
+    const normalizedTitle = cleanTitle.toLowerCase();
+    const existingList = movies.length > 0 ? movies : getMovies();
+    const duplicate = existingList.find(
+      m => (m.title || '').trim().toLowerCase() === normalizedTitle && (!editing || String(m.id) !== String(editing.id))
+    );
+
+    if (duplicate) {
+      const alertMsg = `A movie with title "${cleanTitle}" already exists!`;
+      setFormError(alertMsg);
+      toast('error', alertMsg);
       return;
     }
 
@@ -150,6 +171,7 @@ export function ManageMoviesPage() {
 
     const movieToSave: Movie = {
       ...formData,
+      title: cleanTitle,
       genre: selectedGenres,
       cast,
       trailerUrl: (formData.trailerUrl || '').trim(),
@@ -159,11 +181,14 @@ export function ManageMoviesPage() {
     try {
       saveMovie(movieToSave);
       setModalOpen(false);
+      setFormError('');
       toast('success', editing ? 'Movie updated successfully' : 'Movie added successfully');
       await loadMovies();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving movie:', err);
-      toast('error', 'Failed to save movie');
+      const msg = err?.message || 'Failed to save movie';
+      setFormError(msg);
+      toast('error', msg);
     }
   };
 
@@ -313,18 +338,38 @@ export function ManageMoviesPage() {
       {/* Add / Edit Movie Modal */}
       <Modal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={() => {
+          setModalOpen(false);
+          setFormError('');
+        }}
         title={editing ? 'Edit Movie' : 'Add New Movie'}
         size="lg"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button variant="ghost" onClick={() => {
+              setModalOpen(false);
+              setFormError('');
+            }}>Cancel</Button>
             <Button onClick={handleSave}>{editing ? 'Save Changes' : 'Add Movie'}</Button>
           </>
         }
       >
         <div className="space-y-4">
-          <Input label="Title" value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} placeholder="Movie title" />
+          {formError && (
+            <div className="p-3.5 bg-accent-destructive/15 border border-accent-destructive/30 text-accent-destructive rounded-xl text-xs flex items-center gap-2.5 font-medium shadow-sm animate-shake">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 text-accent-destructive" />
+              <span>{formError}</span>
+            </div>
+          )}
+          <Input
+            label="Title"
+            value={formData.title}
+            onChange={e => {
+              setFormData({ ...formData, title: e.target.value });
+              if (formError) setFormError('');
+            }}
+            placeholder="Movie title"
+          />
           <Textarea label="Synopsis" value={formData.synopsis} onChange={e => setFormData({ ...formData, synopsis: e.target.value })} placeholder="Movie synopsis" rows={3} />
           <div className="grid grid-cols-2 gap-4">
             <Input label="Poster URL" value={formData.poster} onChange={e => setFormData({ ...formData, poster: e.target.value })} placeholder="https://..." />

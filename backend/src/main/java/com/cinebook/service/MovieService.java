@@ -43,6 +43,12 @@ public class MovieService {
 
     @Transactional
     public Movie createMovie(Movie movie) {
+        if (movie.getTitle() != null && !movie.getTitle().isBlank()) {
+            String title = movie.getTitle().trim();
+            if (movieRepository.existsByTitleIgnoreCase(title)) {
+                throw new IllegalArgumentException("A movie with title '" + title + "' already exists!");
+            }
+        }
         movie.setId(null);
         return movieRepository.save(movie);
     }
@@ -52,8 +58,13 @@ public class MovieService {
         Movie existing = getMovieById(id);
 
         String title = (updatedMovie.getTitle() != null && !updatedMovie.getTitle().isBlank())
-                ? updatedMovie.getTitle()
+                ? updatedMovie.getTitle().trim()
                 : existing.getTitle();
+
+        if (movieRepository.existsByTitleIgnoreCaseAndIdNot(title, id)) {
+            throw new IllegalArgumentException("A movie with title '" + title + "' already exists!");
+        }
+
         String synopsis = updatedMovie.getSynopsis() != null ? updatedMovie.getSynopsis() : existing.getSynopsis();
         String castCsv = (updatedMovie.getCast() != null && !updatedMovie.getCast().isEmpty())
                 ? String.join(",", updatedMovie.getCast())

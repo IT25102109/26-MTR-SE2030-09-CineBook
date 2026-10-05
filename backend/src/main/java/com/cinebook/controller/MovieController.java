@@ -3,9 +3,12 @@ package com.cinebook.controller;
 import com.cinebook.model.Movie;
 import com.cinebook.service.MovieService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * REST endpoints for movie management.
@@ -43,13 +46,23 @@ public class MovieController {
     }
 
     @PostMapping
-    public Movie createMovie(@RequestBody Movie movie) {
-        return movieService.createMovie(movie);
+    public ResponseEntity<?> createMovie(@RequestBody Movie movie) {
+        try {
+            Movie created = movieService.createMovie(movie);
+            return ResponseEntity.status(HttpStatus.CREATED).body(created);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
+        }
     }
 
     @PutMapping("/{id}")
-    public Movie updateMovie(@PathVariable Long id, @RequestBody Movie movie) {
-        return movieService.updateMovie(id, movie);
+    public ResponseEntity<?> updateMovie(@PathVariable Long id, @RequestBody Movie movie) {
+        try {
+            Movie updated = movieService.updateMovie(id, movie);
+            return ResponseEntity.ok(updated);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
+        }
     }
 
     @DeleteMapping("/{id}")

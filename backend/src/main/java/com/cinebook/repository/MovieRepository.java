@@ -18,6 +18,12 @@ public interface MovieRepository extends JpaRepository<Movie, MovieId> {
 
     Optional<Movie> findByIdAndTitle(Long id, String title);
 
+    @Query("SELECT COUNT(m) > 0 FROM Movie m WHERE LOWER(TRIM(m.title)) = LOWER(TRIM(:title))")
+    boolean existsByTitleIgnoreCase(@Param("title") String title);
+
+    @Query("SELECT COUNT(m) > 0 FROM Movie m WHERE LOWER(TRIM(m.title)) = LOWER(TRIM(:title)) AND m.id <> :id")
+    boolean existsByTitleIgnoreCaseAndIdNot(@Param("title") String title, @Param("id") Long id);
+
     @Transactional
     @Modifying
     @Query("DELETE FROM Movie m WHERE m.id = :id")
