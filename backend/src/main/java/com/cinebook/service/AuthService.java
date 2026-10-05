@@ -8,6 +8,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
+import jakarta.mail.internet.MimeMessage;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -115,28 +117,56 @@ public class AuthService {
     }
 
     private boolean sendRealEmail(String recipientEmail, String code) {
-        if (mailSender == null || mailSenderPassword == null || mailSenderPassword.isBlank()) {
+        String cleanPassword = mailSenderPassword != null ? mailSenderPassword.replace(" ", "").trim() : "";
+        if (mailSender == null || cleanPassword.isBlank()) {
             System.out.println("[CineBook Email] SMTP not configured. To send live emails, set spring.mail.password in application.properties.");
             return false;
         }
 
         try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(mailSenderUsername.isBlank() ? "no-reply@cinebook.com" : mailSenderUsername);
-            message.setTo(recipientEmail);
-            message.setSubject("[CineBook] Your Verification Code: " + code);
-            message.setText("Welcome to CineBook!\n\n"
-                    + "Your 6-digit verification code is: " + code + "\n\n"
-                    + "This code will expire in 5 minutes.\n"
-                    + "If you did not request this verification, please ignore this email.\n\n"
-                    + "Best regards,\nThe CineBook Team");
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, "utf-8");
 
-            mailSender.send(message);
-            System.out.println("[CineBook Email] Successfully sent verification email to " + recipientEmail);
+            String fromAddress = mailSenderUsername.isBlank() ? "bhanukadaham98@gmail.com" : mailSenderUsername.trim();
+            helper.setFrom(fromAddress, "CineBook Cinema");
+            helper.setTo(recipientEmail);
+            helper.setSubject("[CineBook] Your Verification Code: " + code);
+
+            String htmlBody = "<div style=\"font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 520px; margin: 0 auto; background: #0f1015; color: #ffffff; padding: 32px 24px; border-radius: 16px; border: 1px solid #232733;\">"
+                    + "<div style=\"text-align: center; margin-bottom: 24px;\">"
+                    + "<h1 style=\"color: #F5C518; margin: 0; font-size: 28px; letter-spacing: 2px; font-weight: 800;\">CINEBOOK</h1>"
+                    + "<p style=\"color: #94a3b8; font-size: 13px; margin: 6px 0 0 0;\">Premium Cinema Booking</p>"
+                    + "</div>"
+                    + "<div style=\"background: #181a20; padding: 24px; border-radius: 12px; border: 1px solid #2a2e3d; text-align: center;\">"
+                    + "<p style=\"color: #cbd5e1; font-size: 15px; margin: 0 0 16px 0;\">Use the following 6-digit verification code to complete your registration:</p>"
+                    + "<div style=\"background: #232733; color: #F5C518; font-size: 34px; font-weight: 800; letter-spacing: 8px; padding: 14px 24px; border-radius: 10px; display: inline-block; font-family: monospace; border: 1px dashed #F5C518;\">"
+                    + code
+                    + "</div>"
+                    + "<p style=\"color: #64748b; font-size: 12px; margin: 18px 0 0 0;\">This verification code is valid for <strong>5 minutes</strong>. Do not share this code with anyone.</p>"
+                    + "</div>"
+                    + "<p style=\"color: #475569; font-size: 11px; text-align: center; margin-top: 24px;\">If you did not request this verification, you can safely ignore this email.</p>"
+                    + "</div>";
+
+            helper.setText(htmlBody, true);
+            mailSender.send(mimeMessage);
+            System.out.println("[CineBook Email] Successfully sent live HTML verification email to " + recipientEmail);
             return true;
         } catch (Exception e) {
-            System.err.println("[CineBook Email] Failed to send email to " + recipientEmail + ": " + e.getMessage());
-            return false;
+            System.err.println("[CineBook Email] HTML email failed, trying text fallback: " + e.getMessage());
+            try {
+                SimpleMailMessage message = new SimpleMailMessage();
+                message.setFrom(mailSenderUsername.isBlank() ? "bhanukadaham98@gmail.com" : mailSenderUsername.trim());
+                message.setTo(recipientEmail);
+                message.setSubject("[CineBook] Your Verification Code: " + code);
+                message.setText("Welcome to CineBook!\n\nYour 6-digit verification code is: " + code + "\n\nThis code will expire in 5 minutes.\n\nBest regards,\nThe CineBook Team");
+
+                mailSender.send(message);
+                System.out.println("[CineBook Email] Successfully sent plain text email to " + recipientEmail);
+                return true;
+            } catch (Exception ex) {
+                System.err.println("[CineBook Email] Failed to send email to " + recipientEmail + ": " + ex.getMessage());
+                return false;
+            }
         }
     }
 
