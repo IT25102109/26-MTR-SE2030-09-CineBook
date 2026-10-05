@@ -40,6 +40,12 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
+        <!-- Spring Mail for real Email OTP delivery -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
         <!-- Security + JWT-ready auth, needed for the RBAC hierarchy
              (Admin > Cinema Manager > Customer). Kept in but not yet
              wired up — safe to configure permissively until the auth

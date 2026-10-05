@@ -5,10 +5,20 @@ import com.cinebook.model.Role;
 import com.cinebook.model.User;
 import com.cinebook.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -20,6 +30,27 @@ public class AuthService {
     private final UserRepository userRepository;
     private final Map<String, OtpEntry> otpStorage = new ConcurrentHashMap<>();
     private final SecureRandom random = new SecureRandom();
+
+    @Autowired(required = false)
+    private JavaMailSender mailSender;
+
+    @Value("${spring.mail.username:}")
+    private String mailSenderUsername;
+
+    @Value("${spring.mail.password:}")
+    private String mailSenderPassword;
+
+    @Value("${cinebook.sms.twilio.enabled:false}")
+    private boolean twilioEnabled;
+
+    @Value("${cinebook.sms.twilio.account-sid:}")
+    private String twilioSid;
+
+    @Value("${cinebook.sms.twilio.auth-token:}")
+    private String twilioAuthToken;
+
+    @Value("${cinebook.sms.twilio.from-phone:}")
+    private String twilioFromPhone;
 
     private static final long OTP_VALIDITY_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -47,21 +78,99 @@ public class AuthService {
             throw new IllegalArgumentException("Target email or phone number is required.");
         }
 
-        String target = request.getTarget().trim().toLowerCase();
+        String target = request.getTarget().trim();
+        String targetKey = target.toLowerCase();
         String code = String.format("%06d", random.nextInt(900000) + 100000);
         long expiresAt = System.currentTimeMillis() + OTP_VALIDITY_MS;
 
-        otpStorage.put(target, new OtpEntry(code, expiresAt));
+        otpStorage.put(targetKey, new OtpEntry(code, expiresAt));
         System.out.println("[CineBook Auth] Generated OTP for " + target + ": " + code);
+
+        boolean isEmail = request.getType() != null && request.getType().equalsIgnoreCase("EMAIL") 
+                || target.contains("@");
+
+        boolean realDelivered = false;
+        String deliveryDetail;
+
+        if (isEmail) {
+            realDelivered = sendRealEmail(target, code);
+            deliveryDetail = realDelivered
+                    ? "Verification email dispatched to your inbox: " + target
+                    : "Verification code generated for: " + target + " (Check email or demo code)";
+        } else {
+            realDelivered = sendRealSms(target, code);
+            deliveryDetail = realDelivered
+                    ? "Verification SMS dispatched to your phone: " + target
+                    : "Verification code generated for: " + target + " (Check SMS or demo code)";
+        }
 
         return new OtpResponse(
                 true,
-                "Verification code sent to " + request.getTarget(),
+                deliveryDetail,
                 request.getTarget(),
-                request.getType() != null ? request.getType() : "EMAIL",
+                isEmail ? "EMAIL" : "PHONE",
                 code,
                 (int) (OTP_VALIDITY_MS / 1000)
         );
+    }
+
+    private boolean sendRealEmail(String recipientEmail, String code) {
+        if (mailSender == null || mailSenderPassword == null || mailSenderPassword.isBlank()) {
+            System.out.println("[CineBook Email] SMTP not configured. To send live emails, set spring.mail.password in application.properties.");
+            return false;
+        }
+
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom(mailSenderUsername.isBlank() ? "no-reply@cinebook.com" : mailSenderUsername);
+            message.setTo(recipientEmail);
+            message.setSubject("[CineBook] Your Verification Code: " + code);
+            message.setText("Welcome to CineBook!\n\n"
+                    + "Your 6-digit verification code is: " + code + "\n\n"
+                    + "This code will expire in 5 minutes.\n"
+                    + "If you did not request this verification, please ignore this email.\n\n"
+                    + "Best regards,\nThe CineBook Team");
+
+            mailSender.send(message);
+            System.out.println("[CineBook Email] Successfully sent verification email to " + recipientEmail);
+            return true;
+        } catch (Exception e) {
+            System.err.println("[CineBook Email] Failed to send email to " + recipientEmail + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean sendRealSms(String recipientPhone, String code) {
+        if (!twilioEnabled || twilioSid == null || twilioSid.isBlank() || twilioAuthToken == null || twilioAuthToken.isBlank()) {
+            System.out.println("[CineBook SMS] Twilio not configured. To send live SMS, set cinebook.sms.twilio credentials in application.properties.");
+            return false;
+        }
+
+        try {
+            String auth = Base64.getEncoder().encodeToString((twilioSid + ":" + twilioAuthToken).getBytes(StandardCharsets.UTF_8));
+            String formData = "To=" + URLEncoder.encode(recipientPhone, StandardCharsets.UTF_8)
+                    + "&From=" + URLEncoder.encode(twilioFromPhone, StandardCharsets.UTF_8)
+                    + "&Body=" + URLEncoder.encode("Your CineBook verification code is: " + code + ". Valid for 5 minutes.", StandardCharsets.UTF_8);
+
+            HttpRequest httpRequest = HttpRequest.newBuilder()
+                    .uri(URI.create("https://api.twilio.com/2010-04-01/Accounts/" + twilioSid + "/Messages.json"))
+                    .header("Authorization", "Basic " + auth)
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .POST(HttpRequest.BodyPublishers.ofString(formData))
+                    .build();
+
+            HttpResponse<String> response = HttpClient.newHttpClient().send(httpRequest, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                System.out.println("[CineBook SMS] Successfully sent SMS via Twilio to " + recipientPhone);
+                return true;
+            } else {
+                System.err.println("[CineBook SMS] Twilio API returned error HTTP " + response.statusCode() + ": " + response.body());
+                return false;
+            }
+        } catch (Exception e) {
+            System.err.println("[CineBook SMS] Failed to dispatch SMS to " + recipientPhone + ": " + e.getMessage());
+            return false;
+        }
     }
 
     public boolean verifyOtp(VerifyOtpRequest request) {
