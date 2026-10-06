@@ -73,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const registerUser = async (req: RegisterRequest): Promise<User> => {
     const created = await registerUserInStore(req);
-    setUser(created);
+    // User is created and saved to DB, but they must sign in explicitly
     return created;
   };
 

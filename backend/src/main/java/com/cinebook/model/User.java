@@ -84,9 +84,17 @@ public class User {
         }
     }
 
-    @Transient
+    @Column(name = "auth_provider")
     @com.fasterxml.jackson.annotation.JsonProperty("authProvider")
-    private String authProvider;
+    private String authProvider = "EMAIL";
+
+    public String getAuthProvider() {
+        return authProvider != null ? authProvider : "EMAIL";
+    }
+
+    public void setAuthProvider(String authProvider) {
+        this.authProvider = authProvider != null ? authProvider.toUpperCase() : "EMAIL";
+    }
 
     @Transient
     @com.fasterxml.jackson.annotation.JsonProperty("isVerified")

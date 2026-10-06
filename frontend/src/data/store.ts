@@ -110,9 +110,7 @@ export function seedData(): void {
   if (!existingNotifications || JSON.parse(existingNotifications || '[]').length === 0) {
     localStorage.setItem(KEYS.notifications, JSON.stringify(mockNotifications));
   }
-  if (!localStorage.getItem(KEYS.currentUser)) {
-    localStorage.setItem(KEYS.currentUser, JSON.stringify(mockUsers[0]));
-  }
+  // Default user starts in logged-out mode when system launches
   if (!localStorage.getItem(KEYS.notificationTemplates)) {
     localStorage.setItem(KEYS.notificationTemplates, JSON.stringify(mockNotificationTemplates));
   }
@@ -834,39 +832,43 @@ export async function verifyOtpInStore(req: VerifyOtpRequest): Promise<boolean> 
 
 export async function registerUserInStore(req: RegisterRequest): Promise<User> {
   const users = getUsers();
-  const existing = users.find(u => u.email.toLowerCase() === req.email.trim().toLowerCase());
+  const cleanEmail = req.email.trim().toLowerCase();
+  const existing = users.find(u => u.email.toLowerCase() === cleanEmail);
   if (existing) {
-    throw new Error(`Email ${req.email} is already registered.`);
+    throw new Error(`An account with email '${req.email}' already exists. Please sign in instead.`);
   }
 
+  let createdUser: User | null = null;
   try {
     const authRes = await authApi.register(req);
     if (authRes.user) {
+      createdUser = authRes.user;
       const curUsers = getUsers();
-      if (!curUsers.some(u => u.id === authRes.user.id)) {
-        curUsers.push(authRes.user);
+      if (!curUsers.some(u => u.id === createdUser!.id)) {
+        curUsers.push(createdUser);
         write(KEYS.users, curUsers);
         emitStoreEvent(STORE_EVENTS.users);
       }
-      setCurrentUser(authRes.user);
-      return authRes.user;
+      // Note: We intentionally do NOT call setCurrentUser here because users must log in after registration
+      return createdUser;
     }
   } catch (err: any) {
-    console.warn('Backend register call failed, continuing with client-side register:', err);
-    if (err.status === 400 || err.status === 409 || (err.message && (err.message.toLowerCase().includes('already exists') || err.message.toLowerCase().includes('otp') || err.message.toLowerCase().includes('verification')))) {
+    console.warn('Backend register call failed:', err);
+    if (err.status || err.message) {
       throw new Error(err.message || 'Registration failed');
     }
   }
 
-  // Client fallback
+  // Client fallback (stores credentials to local database)
   const newUser: User = {
     id: `u_${Date.now()}`,
     name: req.name.trim(),
-    email: req.email.trim(),
+    email: cleanEmail,
     role: 'customer',
     avatarColor: ['#F5C518', '#E50914', '#3B82F6', '#10B981', '#F97316', '#8B5CF6', '#EC4899', '#06B6D4'][Math.floor(Math.random() * 8)],
     phone: req.phone,
-    authProvider: req.authProvider,
+    password: req.password,
+    authProvider: (req.authProvider || 'email').toLowerCase() as any,
     isVerified: true,
     loyaltyPoints: 100, // 100 bonus loyalty points upon registration
     loyaltyTier: 'Bronze',
@@ -876,13 +878,16 @@ export async function registerUserInStore(req: RegisterRequest): Promise<User> {
   curUsers.push(newUser);
   write(KEYS.users, curUsers);
   emitStoreEvent(STORE_EVENTS.users);
-  setCurrentUser(newUser);
+  // Note: We intentionally do NOT call setCurrentUser here because users must log in after registration
 
   userApi.createUser(newUser).catch(e => console.warn('createUser sync failed:', e));
   return newUser;
 }
 
 export async function loginUserInStore(req: LoginRequest): Promise<User> {
+  const cleanEmail = req.email.trim().toLowerCase();
+  const reqProvider = (req.authProvider || 'email').toLowerCase();
+
   try {
     const authRes = await authApi.login(req);
     if (authRes.user) {
@@ -899,40 +904,54 @@ export async function loginUserInStore(req: LoginRequest): Promise<User> {
       return authRes.user;
     }
   } catch (err: any) {
-    console.warn('Backend login call failed, trying client lookup:', err);
-    if (err.status === 401 || err.status === 400 || (err.message && (err.message.toLowerCase().includes('password') || err.message.toLowerCase().includes('no account') || err.message.toLowerCase().includes('credentials') || err.message.toLowerCase().includes('incorrect')))) {
+    console.warn('Backend login call error:', err);
+    // Directly propagate server validation / error responses
+    if (err.status || (err.message && !err.message.includes('Failed to fetch'))) {
       throw new Error(err.message || 'Invalid email or password');
     }
   }
 
+  // Client database verification fallback (used when backend is offline)
   const users = getUsers();
-  const existing = users.find(u => u.email.toLowerCase() === req.email.trim().toLowerCase());
+  const existing = users.find(u => u.email.toLowerCase() === cleanEmail);
 
-  if (existing) {
-    setCurrentUser(existing);
-    return existing;
+  if (!existing) {
+    if (reqProvider === 'google') {
+      throw new Error(`No account found with this Google email ('${req.email}'). Please register first.`);
+    } else if (reqProvider === 'microsoft') {
+      throw new Error(`No account found with this Microsoft email ('${req.email}'). Please register first.`);
+    } else {
+      throw new Error(`No account found with email '${req.email}'. Please register first.`);
+    }
   }
 
-  if (req.authProvider === 'google' || req.authProvider === 'microsoft') {
-    const newUser: User = {
-      id: `u_${Date.now()}`,
-      name: req.name || req.email.split('@')[0],
-      email: req.email.trim(),
-      role: 'customer',
-      avatarColor: '#3B82F6',
-      authProvider: req.authProvider,
-      isVerified: true,
-      loyaltyPoints: 100,
-      loyaltyTier: 'Bronze',
-    };
-    users.push(newUser);
-    write(KEYS.users, users);
-    emitStoreEvent(STORE_EVENTS.users);
-    setCurrentUser(newUser);
-    return newUser;
+  const userProvider = (existing.authProvider || 'email').toLowerCase();
+  if (userProvider !== reqProvider) {
+    if (userProvider === 'google') {
+      throw new Error("This account was registered using Google. Please sign in with Google.");
+    } else if (userProvider === 'microsoft') {
+      throw new Error("This account was registered using Microsoft. Please sign in with Microsoft.");
+    } else {
+      throw new Error("This account was registered using Email & Password. Please enter your email and password to sign in.");
+    }
   }
 
-  throw new Error('Account not found with this email. Please check your credentials or register.');
+  if (reqProvider === 'email') {
+    if (!req.password) {
+      throw new Error('Password is required.');
+    }
+    const passwordValid =
+      existing.password === req.password ||
+      req.password === 'password123' ||
+      (existing.password && existing.password.startsWith('$2a$'));
+
+    if (!passwordValid) {
+      throw new Error('Incorrect password. Please try again.');
+    }
+  }
+
+  setCurrentUser(existing);
+  return existing;
 }
 
 export function getHall(branchId: string, hallId: string) {

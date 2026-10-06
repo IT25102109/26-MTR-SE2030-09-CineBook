@@ -21,17 +21,23 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
   const [mode, setMode] = useState<'login' | 'register' | 'otp_verify'>(defaultMode);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isNotRegistered, setIsNotRegistered] = useState(false);
+  const [registrationSuccessMessage, setRegistrationSuccessMessage] = useState<string | null>(null);
 
   // Social account prompt state (interactive real Google / Microsoft input)
   const [socialPrompt, setSocialPrompt] = useState<'google' | 'microsoft' | null>(null);
+  const [socialAction, setSocialAction] = useState<'login' | 'register'>('login');
   const [socialEmail, setSocialEmail] = useState('');
   const [socialName, setSocialName] = useState('');
+  const [socialEmailError, setSocialEmailError] = useState('');
 
-  // Login form state
+  // Login form state & inline errors
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [loginEmailError, setLoginEmailError] = useState('');
+  const [loginPasswordError, setLoginPasswordError] = useState('');
 
-  // Register form state
+  // Register form state & inline errors
   const [registerName, setRegisterName] = useState('');
   const [registerEmail, setRegisterEmail] = useState('');
   const [registerPhone, setRegisterPhone] = useState('');
@@ -39,9 +45,16 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
   const [registerConfirmPassword, setRegisterConfirmPassword] = useState('');
   const [otpType, setOtpType] = useState<'email' | 'phone'>('email');
 
-  // OTP state
+  const [registerNameError, setRegisterNameError] = useState('');
+  const [registerEmailError, setRegisterEmailError] = useState('');
+  const [registerPhoneError, setRegisterPhoneError] = useState('');
+  const [registerPasswordError, setRegisterPasswordError] = useState('');
+  const [registerConfirmPasswordError, setRegisterConfirmPasswordError] = useState('');
+
+  // OTP state & inline errors
   const [otpTarget, setOtpTarget] = useState('');
   const [otpCode, setOtpCode] = useState('');
+  const [otpCodeError, setOtpCodeError] = useState('');
   const [demoCode, setDemoCode] = useState<string | null>(null);
   const [deliveryMessage, setDeliveryMessage] = useState<string | null>(null);
 
@@ -50,18 +63,35 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
 
   const resetForm = () => {
     setError(null);
+    setIsNotRegistered(false);
+    setRegistrationSuccessMessage(null);
     setLoading(false);
+
     setLoginEmail('');
     setLoginPassword('');
+    setLoginEmailError('');
+    setLoginPasswordError('');
+
     setRegisterName('');
     setRegisterEmail('');
     setRegisterPhone('');
     setRegisterPassword('');
     setRegisterConfirmPassword('');
+    setRegisterNameError('');
+    setRegisterEmailError('');
+    setRegisterPhoneError('');
+    setRegisterPasswordError('');
+    setRegisterConfirmPasswordError('');
+
     setOtpCode('');
+    setOtpCodeError('');
     setDemoCode(null);
     setDeliveryMessage(null);
+
     setSocialPrompt(null);
+    setSocialEmail('');
+    setSocialName('');
+    setSocialEmailError('');
   };
 
   const handleClose = () => {
@@ -69,34 +99,68 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
     onClose();
   };
 
-  const handleEmailLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const validateLoginForm = () => {
+    let isValid = true;
+    setLoginEmailError('');
+    setLoginPasswordError('');
     setError(null);
-    if (!loginEmail.trim()) {
-      setError('Please enter your email address');
-      return;
-    }
-    if (!loginPassword) {
-      setError('Please enter your password');
-      return;
+    setIsNotRegistered(false);
+
+    const emailTrim = loginEmail.trim();
+    if (!emailTrim) {
+      setLoginEmailError('Email address is required');
+      isValid = false;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
+      setLoginEmailError('Please enter a valid email address (e.g. name@example.com)');
+      isValid = false;
     }
 
+    if (!loginPassword) {
+      setLoginPasswordError('Password is required');
+      isValid = false;
+    } else if (loginPassword.length < 6) {
+      setLoginPasswordError('Password must be at least 6 characters');
+      isValid = false;
+    }
+
+    return isValid;
+  };
+
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateLoginForm()) return;
+
     setLoading(true);
+    setError(null);
+    setIsNotRegistered(false);
+    setRegistrationSuccessMessage(null);
+
     try {
       await loginWithEmail(loginEmail.trim(), loginPassword);
       toast('success', 'Signed in successfully! Welcome back.');
       handleClose();
     } catch (err: any) {
-      setError(err.message || 'Login failed. Please check your credentials.');
+      const msg = err.message || 'Login failed. Please check your credentials.';
+      setError(msg);
+      if (
+        msg.toLowerCase().includes('no account') ||
+        msg.toLowerCase().includes('register first') ||
+        msg.toLowerCase().includes('not found')
+      ) {
+        setIsNotRegistered(true);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const openSocialPrompt = (provider: 'google' | 'microsoft') => {
+  const openSocialPrompt = (provider: 'google' | 'microsoft', action: 'login' | 'register') => {
     setError(null);
+    setIsNotRegistered(false);
+    setSocialEmailError('');
     setSocialPrompt(provider);
-    setSocialEmail(provider === 'google' ? '' : '');
+    setSocialAction(action);
+    setSocialEmail('');
     setSocialName('');
   };
 
@@ -104,10 +168,16 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
     e.preventDefault();
     if (!socialPrompt) return;
     setError(null);
+    setSocialEmailError('');
+    setIsNotRegistered(false);
 
     const emailTrim = socialEmail.trim();
-    if (!emailTrim || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
-      setError(`Please enter a valid ${socialPrompt === 'google' ? 'Google' : 'Microsoft'} email address`);
+    if (!emailTrim) {
+      setSocialEmailError('Email address is required');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
+      setSocialEmailError(`Please enter a valid ${socialPrompt === 'google' ? 'Google' : 'Microsoft'} email address`);
       return;
     }
 
@@ -115,40 +185,99 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
 
     setLoading(true);
     try {
-      await loginWithSocial(socialPrompt, emailTrim, nameTrim);
-      toast('success', `Signed in with ${socialPrompt === 'google' ? 'Google' : 'Microsoft'} successfully! Welcome, ${nameTrim}.`);
-      handleClose();
+      if (socialAction === 'register') {
+        // Register the social account to the database
+        await registerUser({
+          name: nameTrim,
+          email: emailTrim,
+          authProvider: socialPrompt,
+          verificationCode: 'social_verified',
+        });
+
+        toast('success', `Registered with ${socialPrompt === 'google' ? 'Google' : 'Microsoft'}! Please sign in.`);
+        setRegistrationSuccessMessage(`Registration successful with ${socialPrompt === 'google' ? 'Google' : 'Microsoft'}! Please click "Continue with ${socialPrompt === 'google' ? 'Google' : 'Microsoft'}" to sign in.`);
+        setSocialPrompt(null);
+        setMode('login');
+      } else {
+        // Sign In with social account
+        await loginWithSocial(socialPrompt, emailTrim, nameTrim);
+        toast('success', `Signed in with ${socialPrompt === 'google' ? 'Google' : 'Microsoft'}! Welcome, ${nameTrim}.`);
+        handleClose();
+      }
     } catch (err: any) {
-      setError(err.message || `Failed to sign in with ${socialPrompt}`);
+      const msg = err.message || `Authentication failed with ${socialPrompt}`;
+      setError(msg);
+      if (
+        msg.toLowerCase().includes('no account') ||
+        msg.toLowerCase().includes('register first')
+      ) {
+        setIsNotRegistered(true);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleStartRegistration = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const validateRegisterForm = () => {
+    let isValid = true;
+    setRegisterNameError('');
+    setRegisterEmailError('');
+    setRegisterPhoneError('');
+    setRegisterPasswordError('');
+    setRegisterConfirmPasswordError('');
     setError(null);
 
-    if (!registerName.trim()) {
-      setError('Full name is required');
-      return;
+    const nameTrim = registerName.trim();
+    if (!nameTrim) {
+      setRegisterNameError('Full name is required');
+      isValid = false;
+    } else if (nameTrim.length < 2) {
+      setRegisterNameError('Full name must be at least 2 characters');
+      isValid = false;
     }
-    if (!registerEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(registerEmail.trim())) {
-      setError('A valid email address is required');
-      return;
+
+    const emailTrim = registerEmail.trim();
+    if (!emailTrim) {
+      setRegisterEmailError('Email address is required');
+      isValid = false;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
+      setRegisterEmailError('Please enter a valid email address (e.g. name@example.com)');
+      isValid = false;
     }
-    if (otpType === 'phone' && !registerPhone.trim()) {
-      setError('Mobile phone number is required for SMS OTP verification');
-      return;
+
+    if (otpType === 'phone') {
+      const phoneTrim = registerPhone.trim();
+      if (!phoneTrim) {
+        setRegisterPhoneError('Mobile phone number is required for SMS OTP');
+        isValid = false;
+      } else if (phoneTrim.length < 7) {
+        setRegisterPhoneError('Please enter a valid phone number');
+        isValid = false;
+      }
     }
-    if (!registerPassword || registerPassword.length < 6) {
-      setError('Password must be at least 6 characters long');
-      return;
+
+    if (!registerPassword) {
+      setRegisterPasswordError('Password is required');
+      isValid = false;
+    } else if (registerPassword.length < 6) {
+      setRegisterPasswordError('Password must be at least 6 characters');
+      isValid = false;
     }
-    if (registerPassword !== registerConfirmPassword) {
-      setError('Passwords do not match');
-      return;
+
+    if (!registerConfirmPassword) {
+      setRegisterConfirmPasswordError('Please confirm your password');
+      isValid = false;
+    } else if (registerPassword !== registerConfirmPassword) {
+      setRegisterConfirmPasswordError('Passwords do not match');
+      isValid = false;
     }
+
+    return isValid;
+  };
+
+  const handleStartRegistration = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateRegisterForm()) return;
 
     setLoading(true);
     const target = otpType === 'email' ? registerEmail.trim() : registerPhone.trim();
@@ -162,7 +291,7 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
         }
         setDeliveryMessage(otpRes.message);
         setMode('otp_verify');
-        toast('info', `OTP code prepared for ${target}`);
+        toast('info', `OTP code sent to ${target}`);
       } else {
         setError(otpRes.message || 'Failed to send OTP code. Please try again.');
       }
@@ -176,33 +305,47 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
   const handleVerifyOtpAndRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setOtpCodeError('');
 
-    if (!otpCode || otpCode.trim().length !== 6) {
-      setError('Please enter the complete 6-digit verification code');
+    const cleanOtp = otpCode.trim();
+    if (!cleanOtp) {
+      setOtpCodeError('Verification code is required');
+      return;
+    }
+    if (cleanOtp.length !== 6) {
+      setOtpCodeError('Please enter the complete 6-digit code');
       return;
     }
 
     setLoading(true);
     try {
-      const isValid = await verifyOtp(otpTarget, otpCode.trim());
+      const isValid = await verifyOtp(otpTarget, cleanOtp);
       if (!isValid) {
+        setOtpCodeError('Invalid or expired verification code');
         setError('Invalid or expired verification code. Please check and retry.');
         setLoading(false);
         return;
       }
 
-      // Finalize registration
+      // Finalize registration (saves credentials to database)
       await registerUser({
         name: registerName.trim(),
         email: registerEmail.trim(),
         phone: registerPhone.trim() || undefined,
         password: registerPassword,
         authProvider: 'email',
-        verificationCode: otpCode.trim(),
+        verificationCode: cleanOtp,
       });
 
-      toast('success', 'Registration completed! 100 welcome bonus loyalty points added.');
-      handleClose();
+      // User must log in after registration!
+      toast('success', 'Registration completed successfully! Please sign in with your credentials.');
+      setRegistrationSuccessMessage(`Account created for ${registerEmail.trim()}! Please sign in with your email and password.`);
+      setLoginEmail(registerEmail.trim());
+      setLoginPassword('');
+      setMode('login');
+      setOtpCode('');
+      setDemoCode(null);
+      setDeliveryMessage(null);
     } catch (err: any) {
       setError(err.message || 'Verification or registration failed');
     } finally {
@@ -219,7 +362,7 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
         setDemoCode(otpRes.demoCode);
       }
       setDeliveryMessage(otpRes.message);
-      toast('info', `New OTP code dispatched for ${otpTarget}`);
+      toast('info', `New OTP code dispatched to ${otpTarget}`);
     } catch (err: any) {
       setError(err.message || 'Failed to resend OTP');
     } finally {
@@ -239,9 +382,9 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
       onClose={handleClose}
       title={
         socialPrompt
-          ? socialPrompt === 'google'
-            ? 'Sign in with Google'
-            : 'Sign in with Microsoft'
+          ? socialAction === 'register'
+            ? `Register with ${socialPrompt === 'google' ? 'Google' : 'Microsoft'}`
+            : `Sign In with ${socialPrompt === 'google' ? 'Google' : 'Microsoft'}`
           : mode === 'otp_verify'
           ? 'Verify Your Account'
           : mode === 'register'
@@ -251,7 +394,7 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
       size="sm"
     >
       <div className="space-y-4">
-        {/* INTERACTIVE SOCIAL ACCOUNT SIGN-IN MODAL VIEW */}
+        {/* INTERACTIVE SOCIAL ACCOUNT PROMPT (Google / Microsoft) */}
         {socialPrompt ? (
           <form onSubmit={handleConfirmSocialAuth} className="space-y-4">
             <div className="p-4 rounded-xl bg-cinema-elevated border border-cinema-border text-center">
@@ -275,17 +418,36 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
                 </div>
               )}
               <h3 className="font-semibold text-text-primary text-base">
-                {socialPrompt === 'google' ? 'Google Account Authentication' : 'Microsoft Account Authentication'}
+                {socialAction === 'register' ? 'Register with ' : 'Sign in with '}
+                {socialPrompt === 'google' ? 'Google' : 'Microsoft'}
               </h3>
               <p className="text-xs text-text-muted mt-1">
-                Enter your real {socialPrompt === 'google' ? 'Gmail' : 'Microsoft'} account to sign in or register with verified Single Sign-On (SSO).
+                {socialAction === 'register'
+                  ? `Enter your ${socialPrompt === 'google' ? 'Google' : 'Microsoft'} email to create your verified CineBook account.`
+                  : `Enter your registered ${socialPrompt === 'google' ? 'Google' : 'Microsoft'} email to sign in.`}
               </p>
             </div>
 
             {error && (
               <div className="flex items-start gap-2.5 p-3 rounded-xl bg-accent-destructive/10 border border-accent-destructive/30 text-accent-destructive text-sm animate-fade-in">
                 <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                <p className="flex-1">{error}</p>
+                <div className="flex-1 space-y-2">
+                  <p>{error}</p>
+                  {isNotRegistered && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="primary"
+                      onClick={() => {
+                        setSocialAction('register');
+                        setError(null);
+                        setIsNotRegistered(false);
+                      }}
+                    >
+                      Register with {socialPrompt === 'google' ? 'Google' : 'Microsoft'}
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -295,17 +457,24 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
                 type="email"
                 placeholder={socialPrompt === 'google' ? 'e.g. yourname@gmail.com' : 'e.g. yourname@outlook.com'}
                 value={socialEmail}
-                onChange={e => setSocialEmail(e.target.value)}
+                onChange={e => {
+                  setSocialEmail(e.target.value);
+                  if (socialEmailError) setSocialEmailError('');
+                  if (error) setError(null);
+                }}
+                error={socialEmailError}
                 required
                 autoFocus
               />
-              <Input
-                label="Your Full Name (Optional)"
-                type="text"
-                placeholder="e.g. Daham Bhanuka"
-                value={socialName}
-                onChange={e => setSocialName(e.target.value)}
-              />
+              {socialAction === 'register' && (
+                <Input
+                  label="Your Full Name (Optional)"
+                  type="text"
+                  placeholder="e.g. Alex Carter"
+                  value={socialName}
+                  onChange={e => setSocialName(e.target.value)}
+                />
+              )}
             </div>
 
             <div className="flex gap-2 pt-2">
@@ -319,7 +488,11 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
                 Back
               </Button>
               <Button type="submit" className="flex-[2]" disabled={loading}>
-                {loading ? 'Authenticating...' : `Continue with ${socialPrompt === 'google' ? 'Google' : 'Microsoft'}`}
+                {loading
+                  ? 'Processing...'
+                  : socialAction === 'register'
+                  ? `Register with ${socialPrompt === 'google' ? 'Google' : 'Microsoft'}`
+                  : `Sign In with ${socialPrompt === 'google' ? 'Google' : 'Microsoft'}`}
               </Button>
             </div>
           </form>
@@ -332,6 +505,8 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
                   type="button"
                   onClick={() => {
                     setError(null);
+                    setIsNotRegistered(false);
+                    setRegistrationSuccessMessage(null);
                     setMode('login');
                   }}
                   className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
@@ -346,6 +521,8 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
                   type="button"
                   onClick={() => {
                     setError(null);
+                    setIsNotRegistered(false);
+                    setRegistrationSuccessMessage(null);
                     setMode('register');
                   }}
                   className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
@@ -354,16 +531,43 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
                       : 'text-text-secondary hover:text-text-primary'
                   }`}
                 >
-                  Register
+                  Create Account
                 </button>
               </div>
             )}
 
-            {/* Global Error Banner */}
+            {/* Registration Success Banner */}
+            {registrationSuccessMessage && (
+              <div className="flex items-start gap-2.5 p-3 rounded-xl bg-accent-success/15 border border-accent-success/40 text-accent-success text-xs animate-fade-in">
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <p className="flex-1 font-medium">{registrationSuccessMessage}</p>
+              </div>
+            )}
+
+            {/* Global Error Banner with smart Registration Switcher */}
             {error && (
               <div className="flex items-start gap-2.5 p-3 rounded-xl bg-accent-destructive/10 border border-accent-destructive/30 text-accent-destructive text-sm animate-fade-in">
                 <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                <p className="flex-1">{error}</p>
+                <div className="flex-1 space-y-2">
+                  <p>{error}</p>
+                  {isNotRegistered && mode === 'login' && (
+                    <div className="pt-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="primary"
+                        onClick={() => {
+                          setRegisterEmail(loginEmail.trim());
+                          setMode('register');
+                          setError(null);
+                          setIsNotRegistered(false);
+                        }}
+                      >
+                        Register Now
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -372,7 +576,7 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
               <div className="space-y-2.5">
                 <button
                   type="button"
-                  onClick={() => openSocialPrompt('google')}
+                  onClick={() => openSocialPrompt('google', mode === 'login' ? 'login' : 'register')}
                   disabled={loading}
                   className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl border border-cinema-border bg-cinema-elevated hover:bg-cinema-border/60 hover:border-text-secondary/40 text-text-primary font-medium text-sm transition-all shadow-sm group"
                 >
@@ -399,7 +603,7 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
 
                 <button
                   type="button"
-                  onClick={() => openSocialPrompt('microsoft')}
+                  onClick={() => openSocialPrompt('microsoft', mode === 'login' ? 'login' : 'register')}
                   disabled={loading}
                   className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl border border-cinema-border bg-cinema-elevated hover:bg-cinema-border/60 hover:border-text-secondary/40 text-text-primary font-medium text-sm transition-all shadow-sm"
                 >
@@ -415,7 +619,7 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
                 <div className="relative flex items-center justify-center my-3">
                   <div className="border-t border-cinema-border w-full" />
                   <span className="bg-cinema-card px-3 text-xs font-semibold text-text-muted uppercase tracking-wider">
-                    Or with Email & OTP
+                    Or with Email
                   </span>
                 </div>
               </div>
@@ -429,7 +633,13 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
                   type="email"
                   placeholder="e.g. alex@cinebook.com"
                   value={loginEmail}
-                  onChange={e => setLoginEmail(e.target.value)}
+                  onChange={e => {
+                    setLoginEmail(e.target.value);
+                    if (loginEmailError) setLoginEmailError('');
+                    if (error) setError(null);
+                    if (isNotRegistered) setIsNotRegistered(false);
+                  }}
+                  error={loginEmailError}
                   required
                 />
                 <Input
@@ -437,7 +647,12 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
                   type="password"
                   placeholder="••••••••"
                   value={loginPassword}
-                  onChange={e => setLoginPassword(e.target.value)}
+                  onChange={e => {
+                    setLoginPassword(e.target.value);
+                    if (loginPasswordError) setLoginPasswordError('');
+                    if (error) setError(null);
+                  }}
+                  error={loginPasswordError}
                   required
                 />
                 <Button type="submit" className="w-full" disabled={loading}>
@@ -453,7 +668,12 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
                   label="Full Name"
                   placeholder="e.g. Daham Bhanuka"
                   value={registerName}
-                  onChange={e => setRegisterName(e.target.value)}
+                  onChange={e => {
+                    setRegisterName(e.target.value);
+                    if (registerNameError) setRegisterNameError('');
+                    if (error) setError(null);
+                  }}
+                  error={registerNameError}
                   required
                 />
                 <Input
@@ -461,21 +681,31 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
                   type="email"
                   placeholder="e.g. yourname@gmail.com"
                   value={registerEmail}
-                  onChange={e => setRegisterEmail(e.target.value)}
+                  onChange={e => {
+                    setRegisterEmail(e.target.value);
+                    if (registerEmailError) setRegisterEmailError('');
+                    if (error) setError(null);
+                  }}
+                  error={registerEmailError}
                   required
                 />
                 <Input
-                  label="Mobile Phone Number (Required for SMS OTP)"
+                  label="Mobile Phone Number"
                   type="tel"
-                  placeholder="e.g. +94 77 123 4567 or +1 555-0192"
+                  placeholder="e.g. +94 77 123 4567"
                   value={registerPhone}
-                  onChange={e => setRegisterPhone(e.target.value)}
+                  onChange={e => {
+                    setRegisterPhone(e.target.value);
+                    if (registerPhoneError) setRegisterPhoneError('');
+                    if (error) setError(null);
+                  }}
+                  error={registerPhoneError}
                 />
 
                 {/* OTP verification channel preference */}
                 <div>
                   <label className="text-xs font-medium text-text-secondary block mb-1.5">
-                    Send OTP Verification Via
+                    Send Verification Code Via
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     <button
@@ -487,7 +717,7 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
                           : 'border-cinema-border bg-cinema-elevated text-text-muted hover:text-text-primary'
                       }`}
                     >
-                      <Mail className="w-3.5 h-3.5" /> Email Code
+                      <Mail className="w-3.5 h-3.5" /> Email OTP
                     </button>
                     <button
                       type="button"
@@ -509,7 +739,12 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
                     type="password"
                     placeholder="6+ chars"
                     value={registerPassword}
-                    onChange={e => setRegisterPassword(e.target.value)}
+                    onChange={e => {
+                      setRegisterPassword(e.target.value);
+                      if (registerPasswordError) setRegisterPasswordError('');
+                      if (error) setError(null);
+                    }}
+                    error={registerPasswordError}
                     required
                   />
                   <Input
@@ -517,18 +752,23 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
                     type="password"
                     placeholder="Match password"
                     value={registerConfirmPassword}
-                    onChange={e => setRegisterConfirmPassword(e.target.value)}
+                    onChange={e => {
+                      setRegisterConfirmPassword(e.target.value);
+                      if (registerConfirmPasswordError) setRegisterConfirmPasswordError('');
+                      if (error) setError(null);
+                    }}
+                    error={registerConfirmPasswordError}
                     required
                   />
                 </div>
 
                 <div className="p-2.5 rounded-xl bg-accent-primary/5 border border-accent-primary/20 flex items-center gap-2 text-xs text-text-secondary">
                   <Sparkles className="w-4 h-4 text-accent-primary flex-shrink-0" />
-                  <span>Get <strong>100 bonus loyalty points</strong> instantly upon registration!</span>
+                  <span>Get <strong>100 bonus loyalty points</strong> upon registration!</span>
                 </div>
 
                 <Button type="submit" className="w-full mt-2" disabled={loading}>
-                  {loading ? 'Sending Verification Code...' : 'Continue to Verification'}
+                  {loading ? 'Sending Code...' : 'Send Verification Code'}
                 </Button>
               </form>
             )}
@@ -556,14 +796,17 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
                 {demoCode && (
                   <div className="p-3 rounded-xl bg-accent-primary/10 border border-accent-primary/30 flex items-center justify-between text-xs">
                     <div>
-                      <span className="text-text-muted block text-[11px]">Instant Verification Code (Dev/Demo Mode):</span>
+                      <span className="text-text-muted block text-[11px]">Verification Code (Dev/Demo Mode):</span>
                       <strong className="text-accent-primary font-mono text-base tracking-widest">
                         {demoCode}
                       </strong>
                     </div>
                     <button
                       type="button"
-                      onClick={() => setOtpCode(demoCode)}
+                      onClick={() => {
+                        setOtpCode(demoCode);
+                        setOtpCodeError('');
+                      }}
                       className="px-2.5 py-1.5 rounded-lg bg-accent-primary text-black font-semibold hover:opacity-90 transition-opacity"
                     >
                       Auto-fill
@@ -578,7 +821,12 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
                     maxLength={6}
                     placeholder="123456"
                     value={otpCode}
-                    onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                    onChange={e => {
+                      setOtpCode(e.target.value.replace(/\D/g, ''));
+                      if (otpCodeError) setOtpCodeError('');
+                      if (error) setError(null);
+                    }}
+                    error={otpCodeError}
                     className="text-center font-mono text-xl tracking-widest"
                     required
                     autoFocus
@@ -602,13 +850,17 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
                     type="button"
                     variant="ghost"
                     className="flex-1"
-                    onClick={() => setMode('register')}
+                    onClick={() => {
+                      setMode('register');
+                      setError(null);
+                      setOtpCodeError('');
+                    }}
                     disabled={loading}
                   >
                     Back
                   </Button>
                   <Button type="submit" className="flex-[2]" disabled={loading}>
-                    {loading ? 'Verifying...' : 'Verify & Register'}
+                    {loading ? 'Verifying...' : 'Verify & Complete Registration'}
                   </Button>
                 </div>
               </form>
@@ -636,7 +888,7 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
                   >
                     <div>
                       <p className="text-xs font-semibold text-text-primary">Alex Carter (Customer)</p>
-                      <p className="text-[11px] text-text-muted">Browse movies, seat reservations, loyalty points</p>
+                      <p className="text-[11px] text-text-muted">alex@cinebook.com / password123</p>
                     </div>
                     <Badge variant="amber">Customer</Badge>
                   </button>
@@ -648,7 +900,7 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
                   >
                     <div>
                       <p className="text-xs font-semibold text-text-primary">Jordan Lee (Cinema Manager)</p>
-                      <p className="text-[11px] text-text-muted">Branch 1: Downtown showtimes & halls</p>
+                      <p className="text-[11px] text-text-muted">jordan@cinebook.com / password123</p>
                     </div>
                     <Badge variant="red">Manager</Badge>
                   </button>
@@ -660,7 +912,7 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
                   >
                     <div>
                       <p className="text-xs font-semibold text-text-primary">Sam Rivera (Sole Admin)</p>
-                      <p className="text-[11px] text-text-muted">Full system control, users & analytics</p>
+                      <p className="text-[11px] text-text-muted">sam@cinebook.com / password123</p>
                     </div>
                     <Badge variant="blue">Admin</Badge>
                   </button>

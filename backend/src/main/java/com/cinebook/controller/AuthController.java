@@ -46,7 +46,10 @@ public class AuthController {
             AuthResponse response = authService.register(request);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("success", false, "message", e.getMessage()));
+            String msg = e.getMessage();
+            boolean conflict = msg != null && msg.toLowerCase().contains("already exists");
+            HttpStatus status = conflict ? HttpStatus.CONFLICT : HttpStatus.BAD_REQUEST;
+            return ResponseEntity.status(status).body(Map.of("success", false, "conflict", conflict, "message", msg != null ? msg : "Registration failed."));
         }
     }
 
@@ -56,7 +59,14 @@ public class AuthController {
             AuthResponse response = authService.login(request);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("success", false, "message", e.getMessage()));
+            String msg = e.getMessage();
+            boolean notFound = msg != null && (msg.toLowerCase().contains("no account") || msg.toLowerCase().contains("register first"));
+            HttpStatus status = notFound ? HttpStatus.NOT_FOUND : HttpStatus.UNAUTHORIZED;
+            return ResponseEntity.status(status).body(Map.of(
+                    "success", false,
+                    "notFound", notFound,
+                    "message", msg != null ? msg : "Login failed."
+            ));
         }
     }
 }

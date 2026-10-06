@@ -313,13 +313,14 @@ public class AuthService {
 
         String rawPassword = request.getPassword() != null && !request.getPassword().isBlank()
                 ? request.getPassword()
-                : "password123";
+                : ("oauth_" + provider.toLowerCase());
         newUser.setPassword(passwordEncoder.encode(rawPassword));
 
+        newUser.setAuthProvider(provider);
         newUser.setRole(Role.CUSTOMER);
         newUser.setLoyaltyPoints(100); // 100 bonus loyalty points on registration
         newUser.setMembershipTier("Bronze");
-        newUser.setAvatarColor("#F5C518");
+        newUser.setAvatarColor(provider.equals("GOOGLE") ? "#EA4335" : provider.equals("MICROSOFT") ? "#00A4EF" : "#F5C518");
 
         User savedUser = userRepository.save(newUser);
         String token = "cb_token_" + UUID.randomUUID().toString().replace("-", "");
@@ -338,58 +339,57 @@ public class AuthService {
 
         Optional<User> existingUser = userRepository.findByEmailIgnoreCase(cleanEmail);
 
-        if ("GOOGLE".equals(provider) || "MICROSOFT".equals(provider)) {
-            User user;
-            if (existingUser.isPresent()) {
-                user = existingUser.get();
-            } else {
-                // Auto-provision verified social account as Customer
-                User newUser = new User();
-                newUser.setFullName(request.getName() != null && !request.getName().isBlank()
-                        ? request.getName().trim()
-                        : (provider.equals("GOOGLE") ? "Google User" : "Microsoft User"));
-                newUser.setEmail(cleanEmail);
-                newUser.setPassword(passwordEncoder.encode("oauth_authenticated"));
-                newUser.setRole(Role.CUSTOMER);
-                newUser.setLoyaltyPoints(100);
-                newUser.setMembershipTier("Bronze");
-                newUser.setAvatarColor(provider.equals("GOOGLE") ? "#EA4335" : "#00A4EF");
-                user = userRepository.save(newUser);
-            }
-
-            String token = "cb_social_" + UUID.randomUUID().toString().replace("-", "");
-            return new AuthResponse(true, "Signed in via " + provider, user, token);
-        }
-
-        // Email + Password login
+        // Check if user is registered
         if (existingUser.isEmpty()) {
-            throw new IllegalArgumentException("No account found with email '" + cleanEmail + "'. Please check your email or register.");
+            if ("GOOGLE".equals(provider)) {
+                throw new IllegalArgumentException("No account found with this Google email ('" + cleanEmail + "'). Please register first.");
+            } else if ("MICROSOFT".equals(provider)) {
+                throw new IllegalArgumentException("No account found with this Microsoft email ('" + cleanEmail + "'). Please register first.");
+            } else {
+                throw new IllegalArgumentException("No account found with email '" + cleanEmail + "'. Please register first.");
+            }
         }
 
         User user = existingUser.get();
-        if (request.getPassword() == null || request.getPassword().isBlank()) {
-            throw new IllegalArgumentException("Password is required.");
-        }
+        String userProvider = user.getAuthProvider() != null ? user.getAuthProvider().toUpperCase() : "EMAIL";
 
-        // Match password with PasswordEncoder (BCrypt) + fallback
-        boolean passwordMatches = false;
-        String userPassword = user.getPassword();
-        if (userPassword != null) {
-            if (userPassword.startsWith("$2a$") || userPassword.startsWith("$2b$") || userPassword.startsWith("$2y$")) {
-                passwordMatches = passwordEncoder.matches(request.getPassword(), userPassword);
+        // Enforce registration provider matching
+        if (!userProvider.equalsIgnoreCase(provider)) {
+            if ("GOOGLE".equals(userProvider)) {
+                throw new IllegalArgumentException("This account was registered using Google. Please sign in with Google.");
+            } else if ("MICROSOFT".equals(userProvider)) {
+                throw new IllegalArgumentException("This account was registered using Microsoft. Please sign in with Microsoft.");
             } else {
-                passwordMatches = request.getPassword().equals(userPassword);
+                throw new IllegalArgumentException("This account was registered using Email & Password. Please enter your email and password to sign in.");
             }
         }
-        if (!passwordMatches && "password123".equals(request.getPassword())) {
-            passwordMatches = true;
+
+        // Email + Password login verification
+        if ("EMAIL".equals(provider)) {
+            if (request.getPassword() == null || request.getPassword().isBlank()) {
+                throw new IllegalArgumentException("Password is required.");
+            }
+
+            // Match password with PasswordEncoder (BCrypt) + fallback
+            boolean passwordMatches = false;
+            String userPassword = user.getPassword();
+            if (userPassword != null) {
+                if (userPassword.startsWith("$2a$") || userPassword.startsWith("$2b$") || userPassword.startsWith("$2y$")) {
+                    passwordMatches = passwordEncoder.matches(request.getPassword(), userPassword);
+                } else {
+                    passwordMatches = request.getPassword().equals(userPassword);
+                }
+            }
+            if (!passwordMatches && "password123".equals(request.getPassword())) {
+                passwordMatches = "password123".equals(userPassword);
+            }
+
+            if (!passwordMatches) {
+                throw new IllegalArgumentException("Incorrect password. Please try again.");
+            }
         }
 
-        if (!passwordMatches) {
-            throw new IllegalArgumentException("Incorrect password. Please try again.");
-        }
-
-        String token = "cb_token_" + UUID.randomUUID().toString().replace("-", "");
+        String token = "cb_" + provider.toLowerCase() + "_" + UUID.randomUUID().toString().replace("-", "");
         return new AuthResponse(true, "Login successful!", user, token);
     }
 }

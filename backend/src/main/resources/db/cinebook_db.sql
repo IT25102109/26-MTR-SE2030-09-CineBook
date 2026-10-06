@@ -148,6 +148,7 @@ CREATE TABLE `users` (
   `password` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
   `phone` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,
   `role` enum('ADMIN','CINEMA_MANAGER','CUSTOMER') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'CUSTOMER',
+  `auth_provider` varchar(50) COLLATE utf8mb4_general_ci DEFAULT 'EMAIL',
   `date_registered` datetime DEFAULT CURRENT_TIMESTAMP,
   `branch_id` bigint DEFAULT NULL,
   `loyalty_points` int DEFAULT 0,
@@ -468,15 +469,15 @@ INSERT INTO `movie_genres` (`movie_id`, `genre_id`) VALUES
 -- --------------------------------------------------------
 -- Seed: `users`
 -- --------------------------------------------------------
-INSERT INTO `users` (`id`, `full_name`, `first_name`, `last_name`, `email`, `password`, `phone`, `role`, `branch_id`, `loyalty_points`, `membership_tier`, `employee_id`, `access_level`, `avatar_color`) VALUES
-(1, 'Alex Carter', 'Alex', 'Carter', 'alex@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-212-555-0199', 'CUSTOMER', NULL, 480, 'Silver', NULL, NULL, '#F5C518'),
-(2, 'Jordan Lee', 'Jordan', 'Lee', 'jordan@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-212-555-0198', 'CINEMA_MANAGER', 1, 0, 'Bronze', 'EMP-001', NULL, '#E50914'),
-(3, 'Sam Rivera', 'Sam', 'Rivera', 'sam@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-212-555-0197', 'ADMIN', NULL, 0, 'Bronze', NULL, 'SUPER_ADMIN', '#3B82F6'),
-(4, 'Taylor Swift', 'Taylor', 'Swift', 'taylor@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-310-555-0196', 'CUSTOMER', NULL, 1450, 'Platinum', NULL, NULL, '#10B981'),
-(5, 'Morgan Freeman', 'Morgan', 'Freeman', 'morgan@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-312-555-0195', 'CUSTOMER', NULL, 860, 'Gold', NULL, NULL, '#F97316'),
-(6, 'Casey Nguyen', 'Casey', 'Nguyen', 'casey@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-310-555-0194', 'CINEMA_MANAGER', 2, 0, 'Bronze', 'EMP-002', NULL, '#8B5CF6'),
-(7, 'Riley Patel', 'Riley', 'Patel', 'riley@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-312-555-0193', 'CUSTOMER', NULL, 120, 'Bronze', NULL, NULL, '#EC4899'),
-(8, 'Jamie Chen', 'Jamie', 'Chen', 'jamie@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-212-555-0192', 'CINEMA_MANAGER', 3, 0, 'Bronze', 'EMP-003', NULL, '#06B6D4');
+INSERT INTO `users` (`id`, `full_name`, `first_name`, `last_name`, `email`, `password`, `phone`, `role`, `auth_provider`, `branch_id`, `loyalty_points`, `membership_tier`, `employee_id`, `access_level`, `avatar_color`) VALUES
+(1, 'Alex Carter', 'Alex', 'Carter', 'alex@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-212-555-0199', 'CUSTOMER', 'EMAIL', NULL, 480, 'Silver', NULL, NULL, '#F5C518'),
+(2, 'Jordan Lee', 'Jordan', 'Lee', 'jordan@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-212-555-0198', 'CINEMA_MANAGER', 'EMAIL', 1, 0, 'Bronze', 'EMP-001', NULL, '#E50914'),
+(3, 'Sam Rivera', 'Sam', 'Rivera', 'sam@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-212-555-0197', 'ADMIN', 'EMAIL', NULL, 0, 'Bronze', NULL, 'SUPER_ADMIN', '#3B82F6'),
+(4, 'Taylor Swift', 'Taylor', 'Swift', 'taylor@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-310-555-0196', 'CUSTOMER', 'EMAIL', NULL, 1450, 'Platinum', NULL, NULL, '#10B981'),
+(5, 'Morgan Freeman', 'Morgan', 'Freeman', 'morgan@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-312-555-0195', 'CUSTOMER', 'EMAIL', NULL, 860, 'Gold', NULL, NULL, '#F97316'),
+(6, 'Casey Nguyen', 'Casey', 'Nguyen', 'casey@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-310-555-0194', 'CINEMA_MANAGER', 'EMAIL', 2, 0, 'Bronze', 'EMP-002', NULL, '#8B5CF6'),
+(7, 'Riley Patel', 'Riley', 'Patel', 'riley@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-312-555-0193', 'CUSTOMER', 'EMAIL', NULL, 120, 'Bronze', NULL, NULL, '#EC4899'),
+(8, 'Jamie Chen', 'Jamie', 'Chen', 'jamie@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-212-555-0192', 'CINEMA_MANAGER', 'EMAIL', 3, 0, 'Bronze', 'EMP-003', NULL, '#06B6D4');
 
 -- --------------------------------------------------------
 -- Seed: `showtimes`
