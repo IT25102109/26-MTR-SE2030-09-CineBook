@@ -14,6 +14,11 @@ import jakarta.mail.internet.MimeMessage;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
+import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
+import com.google.api.client.json.gson.GsonFactory;
+
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -22,6 +27,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -58,6 +64,9 @@ public class AuthService {
 
     @Value("${cinebook.sms.twilio.from-phone:}")
     private String twilioFromPhone;
+
+    @Value("${google.client.id:}")
+    private String googleClientId;
 
     private static final long OTP_VALIDITY_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -351,21 +360,28 @@ public class AuthService {
         }
 
         User user = existingUser.get();
-        String userProvider = user.getAuthProvider() != null ? user.getAuthProvider().toUpperCase() : "EMAIL";
+        String userProvider = user.getAuthProvider() != null ? user.getAuthProvider().toUpperCase() : "LOCAL";
+        boolean isEmailLogin = "EMAIL".equalsIgnoreCase(provider) || "LOCAL".equalsIgnoreCase(provider);
 
         // Enforce registration provider matching
-        if (!userProvider.equalsIgnoreCase(provider)) {
-            if ("GOOGLE".equals(userProvider)) {
+        if (isEmailLogin) {
+            if ("GOOGLE".equalsIgnoreCase(userProvider) && (user.getPassword() == null || user.getPassword().isBlank())) {
                 throw new IllegalArgumentException("This account was registered using Google. Please sign in with Google.");
-            } else if ("MICROSOFT".equals(userProvider)) {
+            } else if ("MICROSOFT".equalsIgnoreCase(userProvider) && (user.getPassword() == null || user.getPassword().isBlank())) {
+                throw new IllegalArgumentException("This account was registered using Microsoft. Please sign in with Microsoft.");
+            }
+        } else if (!userProvider.equalsIgnoreCase(provider)) {
+            if ("GOOGLE".equalsIgnoreCase(userProvider)) {
+                throw new IllegalArgumentException("This account was registered using Google. Please sign in with Google.");
+            } else if ("MICROSOFT".equalsIgnoreCase(userProvider)) {
                 throw new IllegalArgumentException("This account was registered using Microsoft. Please sign in with Microsoft.");
             } else {
-                throw new IllegalArgumentException("This account was registered using Email & Password. Please enter your email and password to sign in.");
+                throw new IllegalArgumentException("This account was registered with email and password. Please sign in with your email and password.");
             }
         }
 
         // Email + Password login verification
-        if ("EMAIL".equals(provider)) {
+        if (isEmailLogin) {
             if (request.getPassword() == null || request.getPassword().isBlank()) {
                 throw new IllegalArgumentException("Password is required.");
             }
@@ -391,5 +407,157 @@ public class AuthService {
 
         String token = "cb_" + provider.toLowerCase() + "_" + UUID.randomUUID().toString().replace("-", "");
         return new AuthResponse(true, "Login successful!", user, token);
+    }
+
+    @Transactional
+    public AuthResponse loginWithGoogle(GoogleLoginRequest request) {
+        if (request == null || request.getIdToken() == null || request.getIdToken().isBlank()) {
+            throw new IllegalArgumentException("Google authentication token is required.");
+        }
+
+        String tokenString = request.getIdToken().trim();
+        String cleanEmail;
+        String googleId;
+        String name;
+        String pictureUrl;
+
+        // Check if tokenString is a JWT ID token (3 segments separated by dots)
+        boolean isJwt = tokenString.chars().filter(ch -> ch == '.').count() == 2;
+        if (isJwt) {
+            GoogleIdToken idToken;
+            try {
+                GoogleIdTokenVerifier.Builder verifierBuilder = new GoogleIdTokenVerifier.Builder(
+                        GoogleNetHttpTransport.newTrustedTransport(),
+                        GsonFactory.getDefaultInstance()
+                );
+
+                // If a valid Google Client ID is configured, enforce audience check
+                if (googleClientId != null && !googleClientId.isBlank() && !googleClientId.contains("your-google-client-id")) {
+                    verifierBuilder.setAudience(Collections.singletonList(googleClientId.trim()));
+                }
+
+                GoogleIdTokenVerifier verifier = verifierBuilder.build();
+                idToken = verifier.verify(tokenString);
+            } catch (Exception e) {
+                throw new IllegalArgumentException("Invalid or malformed Google ID token: " + e.getMessage());
+            }
+
+            if (idToken == null) {
+                throw new IllegalArgumentException("Google ID token verification failed. The token is invalid or expired.");
+            }
+
+            GoogleIdToken.Payload payload = idToken.getPayload();
+            Boolean emailVerified = payload.getEmailVerified();
+            if (emailVerified == null || !emailVerified) {
+                throw new IllegalArgumentException("Google account email is not verified. Please verify your email with Google first.");
+            }
+
+            String email = payload.getEmail();
+            if (email == null || email.isBlank()) {
+                throw new IllegalArgumentException("Google ID token does not contain an email address.");
+            }
+            cleanEmail = email.trim().toLowerCase();
+            googleId = payload.getSubject();
+            name = (String) payload.get("name");
+            if (name == null || name.isBlank()) {
+                name = (String) payload.get("given_name");
+                if (name == null || name.isBlank()) {
+                    name = cleanEmail.split("@")[0];
+                }
+            }
+            pictureUrl = (String) payload.get("picture");
+        } else {
+            // OAuth2 Access Token verification via Google UserInfo API endpoint
+            try {
+                HttpClient httpClient = HttpClient.newHttpClient();
+                HttpRequest userInfoReq = HttpRequest.newBuilder()
+                        .uri(URI.create("https://www.googleapis.com/oauth2/v3/userinfo"))
+                        .header("Authorization", "Bearer " + tokenString)
+                        .GET()
+                        .build();
+
+                HttpResponse<String> httpResponse = httpClient.send(userInfoReq, HttpResponse.BodyHandlers.ofString());
+                if (httpResponse.statusCode() != 200) {
+                    throw new IllegalArgumentException("Google token verification failed (HTTP " + httpResponse.statusCode() + "): " + httpResponse.body());
+                }
+
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                Map<String, Object> userInfo = mapper.readValue(httpResponse.body(), new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+
+                Object emailVerifiedObj = userInfo.get("email_verified");
+                boolean emailVerified = Boolean.TRUE.equals(emailVerifiedObj) || "true".equalsIgnoreCase(String.valueOf(emailVerifiedObj));
+                if (!emailVerified) {
+                    throw new IllegalArgumentException("Google account email is not verified. Please verify your email with Google first.");
+                }
+
+                String email = (String) userInfo.get("email");
+                if (email == null || email.isBlank()) {
+                    throw new IllegalArgumentException("Google token does not contain an email address.");
+                }
+
+                cleanEmail = email.trim().toLowerCase();
+                googleId = (String) userInfo.get("sub");
+                name = (String) userInfo.get("name");
+                if (name == null || name.isBlank()) {
+                    name = (String) userInfo.get("given_name");
+                    if (name == null || name.isBlank()) {
+                        name = cleanEmail.split("@")[0];
+                    }
+                }
+                pictureUrl = (String) userInfo.get("picture");
+            } catch (IllegalArgumentException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new IllegalArgumentException("Google authentication token verification failed: " + e.getMessage());
+            }
+        }
+
+        // Check if user exists by googleId
+        Optional<User> userByGoogleId = (googleId != null && !googleId.isBlank())
+                ? userRepository.findByGoogleId(googleId)
+                : Optional.empty();
+
+        User user;
+        if (userByGoogleId.isPresent()) {
+            user = userByGoogleId.get();
+            // Update profile picture if user doesn't have one
+            if ((user.getProfilePicture() == null || user.getProfilePicture().isBlank()) && pictureUrl != null) {
+                user.setProfilePicture(pictureUrl);
+                user = userRepository.save(user);
+            }
+        } else {
+            // Check if user exists by email
+            Optional<User> userByEmail = userRepository.findByEmailIgnoreCase(cleanEmail);
+            if (userByEmail.isPresent()) {
+                user = userByEmail.get();
+                // Link Google ID to existing LOCAL account
+                if (googleId != null) {
+                    user.setGoogleId(googleId);
+                }
+                if ((user.getProfilePicture() == null || user.getProfilePicture().isBlank()) && pictureUrl != null) {
+                    user.setProfilePicture(pictureUrl);
+                }
+                user = userRepository.save(user);
+            } else {
+                // Auto-create new user with Role.CUSTOMER, password = null, authProvider = GOOGLE
+                user = new User();
+                user.setFullName(name);
+                user.setEmail(cleanEmail);
+                user.setGoogleId(googleId);
+                user.setAuthProvider("GOOGLE");
+                user.setPassword(null);
+                user.setRole(Role.CUSTOMER);
+                user.setLoyaltyPoints(100);
+                user.setMembershipTier("Bronze");
+                user.setAvatarColor("#EA4335");
+                if (pictureUrl != null) {
+                    user.setProfilePicture(pictureUrl);
+                }
+                user = userRepository.save(user);
+            }
+        }
+
+        String token = "cb_google_" + UUID.randomUUID().toString().replace("-", "");
+        return new AuthResponse(true, "Signed in with Google successfully!", user, token);
     }
 }

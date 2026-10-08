@@ -84,6 +84,15 @@ public class AuthDTOs {
     @NoArgsConstructor
     @AllArgsConstructor
     @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class GoogleLoginRequest {
+        @JsonAlias({"credential", "token", "accessToken", "access_token"})
+        private String idToken;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class AuthResponse {
         private boolean success;
         private String message;

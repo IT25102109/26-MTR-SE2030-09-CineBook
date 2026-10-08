@@ -52,6 +52,8 @@ public class MovieController {
             return ResponseEntity.status(HttpStatus.CREATED).body(created);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", "Failed to save movie: " + e.getMessage()));
         }
     }
 
@@ -62,11 +64,18 @@ public class MovieController {
             return ResponseEntity.ok(updated);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", "Failed to update movie: " + e.getMessage()));
         }
     }
 
     @DeleteMapping("/{id}")
-    public void deleteMovie(@PathVariable Long id) {
-        movieService.deleteMovie(id);
+    public ResponseEntity<?> deleteMovie(@PathVariable Long id) {
+        try {
+            movieService.deleteMovie(id);
+            return ResponseEntity.ok(Map.of("message", "Movie deleted successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", "Failed to delete movie: " + e.getMessage()));
+        }
     }
 }

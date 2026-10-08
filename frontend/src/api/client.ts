@@ -54,7 +54,7 @@ export async function apiClient<T>(endpoint: string, options: RequestOptions = {
     } catch {
       // response wasn't JSON
     }
-    const message = errorData?.message || `HTTP ${response.status}: ${response.statusText}`;
+    const message = errorData?.message || errorData?.error || `HTTP ${response.status}: ${response.statusText}`;
     throw new ApiError(response.status, message, errorData);
   }
 

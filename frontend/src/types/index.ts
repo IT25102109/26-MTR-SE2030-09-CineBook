@@ -9,6 +9,8 @@ export interface User {
   phone?: string;
   password?: string;
   authProvider?: 'email' | 'google' | 'microsoft';
+  googleId?: string;
+  profilePicture?: string;
   isVerified?: boolean;
   assignedBranchId?: string; // Cinema Manager Branch Scoping (Member 2)
   loyaltyPoints?: number;     // Customer Loyalty Points (Member 6)

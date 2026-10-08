@@ -67,8 +67,16 @@ public class User {
     @Column(nullable = false, unique = true)
     private String email;
 
-    @Column(nullable = false)
-    private String password = "password123";
+    @Column(nullable = true)
+    private String password;
+
+    @Column(name = "google_id", unique = true, nullable = true)
+    @com.fasterxml.jackson.annotation.JsonProperty("googleId")
+    private String googleId;
+
+    @Column(name = "profile_picture", nullable = true, length = 1000)
+    @com.fasterxml.jackson.annotation.JsonProperty("profilePicture")
+    private String profilePicture;
 
     private String phone;
 
@@ -86,14 +94,21 @@ public class User {
 
     @Column(name = "auth_provider")
     @com.fasterxml.jackson.annotation.JsonProperty("authProvider")
-    private String authProvider = "EMAIL";
+    private String authProvider = "LOCAL";
 
     public String getAuthProvider() {
-        return authProvider != null ? authProvider : "EMAIL";
+        if (authProvider == null || "EMAIL".equalsIgnoreCase(authProvider)) {
+            return "LOCAL";
+        }
+        return authProvider;
     }
 
     public void setAuthProvider(String authProvider) {
-        this.authProvider = authProvider != null ? authProvider.toUpperCase() : "EMAIL";
+        if (authProvider == null || "EMAIL".equalsIgnoreCase(authProvider) || "LOCAL".equalsIgnoreCase(authProvider)) {
+            this.authProvider = "LOCAL";
+        } else {
+            this.authProvider = authProvider.toUpperCase();
+        }
     }
 
     @Transient

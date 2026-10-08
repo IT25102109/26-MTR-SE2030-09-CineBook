@@ -68,12 +68,12 @@ public class WishlistItem {
     @JsonSetter("userId")
     public void setJsonUserId(Object raw) {
         if (raw == null) {
-            this.userId = 1L;
+            this.userId = null;
         } else if (raw instanceof Number number) {
             this.userId = number.longValue();
         } else {
             String digits = raw.toString().replaceAll("\\D+", "");
-            this.userId = digits.isEmpty() ? 1L : Long.parseLong(digits);
+            this.userId = digits.isEmpty() ? null : Long.parseLong(digits);
         }
     }
 
@@ -85,12 +85,12 @@ public class WishlistItem {
     @JsonSetter("movieId")
     public void setJsonMovieId(Object raw) {
         if (raw == null) {
-            this.movieId = 1L;
+            this.movieId = null;
         } else if (raw instanceof Number number) {
             this.movieId = number.longValue();
         } else {
             String digits = raw.toString().replaceAll("\\D+", "");
-            this.movieId = digits.isEmpty() ? 1L : Long.parseLong(digits);
+            this.movieId = digits.isEmpty() ? null : Long.parseLong(digits);
         }
     }
 

@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import type { Role } from '@/types';
+import { useGoogleLogin } from '@react-oauth/google';
 
 interface AuthModalProps {
   open: boolean;
@@ -15,8 +16,11 @@ interface AuthModalProps {
 }
 
 export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalProps) {
-  const { loginWithEmail, loginWithSocial, sendOtp, verifyOtp, registerUser, login } = useAuth();
+  const { loginWithEmail, loginWithSocial, loginWithGoogle, sendOtp, verifyOtp, registerUser, login } = useAuth();
   const { toast } = useToast();
+
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+  const hasGoogleClientId = Boolean(googleClientId && !googleClientId.includes('your-google-client-id'));
 
   const [mode, setMode] = useState<'login' | 'register' | 'otp_verify'>(defaultMode);
   const [loading, setLoading] = useState(false);
@@ -152,6 +156,58 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGoogleSuccess = async (tokenOrCredential: string) => {
+    if (!tokenOrCredential) {
+      const msg = 'No credential received from Google. Please try again.';
+      setError(msg);
+      toast('error', msg);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setIsNotRegistered(false);
+
+    try {
+      const user = await loginWithGoogle(tokenOrCredential);
+      toast('success', `Welcome, ${user.name || 'User'}! Signed in with Google.`);
+      handleClose();
+    } catch (err: any) {
+      const msg = err.message || 'Google authentication failed. Please try again.';
+      setError(msg);
+      toast('error', msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleError = (err?: any) => {
+    const msg = err?.error_description || 'Google Sign-In was cancelled or failed. Please try again.';
+    setError(msg);
+    toast('error', msg);
+  };
+
+  const googleOAuthLogin = useGoogleLogin({
+    onSuccess: (tokenResponse) => {
+      if (tokenResponse?.access_token) {
+        handleGoogleSuccess(tokenResponse.access_token);
+      }
+    },
+    onError: (errorResponse) => {
+      handleGoogleError(errorResponse);
+    },
+  });
+
+  const handleGoogleClick = () => {
+    if (!hasGoogleClientId) {
+      const msg = 'Please set VITE_GOOGLE_CLIENT_ID in your frontend .env file to enable Google authentication.';
+      setError(msg);
+      toast('info', msg);
+      return;
+    }
+    googleOAuthLogin();
   };
 
   const openSocialPrompt = (provider: 'google' | 'microsoft', action: 'login' | 'register') => {
@@ -571,206 +627,264 @@ export function AuthModal({ open, onClose, defaultMode = 'login' }: AuthModalPro
               </div>
             )}
 
-            {/* SOCIAL AUTH BUTTONS (Available on both Sign In & Register) */}
-            {mode !== 'otp_verify' && (
-              <div className="space-y-2.5">
-                <button
-                  type="button"
-                  onClick={() => openSocialPrompt('google', mode === 'login' ? 'login' : 'register')}
-                  disabled={loading}
-                  className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl border border-cinema-border bg-cinema-elevated hover:bg-cinema-border/60 hover:border-text-secondary/40 text-text-primary font-medium text-sm transition-all shadow-sm group"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24">
-                    <path
-                      fill="#4285F4"
-                      d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3.03h3.88c2.27-2.09 3.66-5.17 3.66-9.12z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.03c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.24v3.13C3.26 21.36 7.33 24 12 24z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.28 14.29c-.25-.72-.38-1.49-.38-2.29s.13-1.57.38-2.29V6.58H1.24C.45 8.15 0 9.97 0 12s.45 3.85 1.24 5.42l4.04-3.13z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.24 6.58l4.04 3.13c.95-2.83 3.6-4.96 6.72-4.96z"
-                    />
-                  </svg>
-                  <span>{mode === 'login' ? 'Continue with Google' : 'Register with Google'}</span>
-                </button>
+            {/* 1. SIGN IN FORM */}
+            {mode === 'login' && (
+              <div className="space-y-4">
+                <form onSubmit={handleEmailLogin} className="space-y-3.5">
+                  <Input
+                    label="Email Address"
+                    type="email"
+                    placeholder="e.g. alex@cinebook.com"
+                    value={loginEmail}
+                    onChange={e => {
+                      setLoginEmail(e.target.value);
+                      if (loginEmailError) setLoginEmailError('');
+                      if (error) setError(null);
+                      if (isNotRegistered) setIsNotRegistered(false);
+                    }}
+                    error={loginEmailError}
+                    required
+                  />
+                  <Input
+                    label="Password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={loginPassword}
+                    onChange={e => {
+                      setLoginPassword(e.target.value);
+                      if (loginPasswordError) setLoginPasswordError('');
+                      if (error) setError(null);
+                    }}
+                    error={loginPasswordError}
+                    required
+                  />
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading ? 'Signing In...' : 'Sign In'}
+                  </Button>
+                </form>
 
-                <button
-                  type="button"
-                  onClick={() => openSocialPrompt('microsoft', mode === 'login' ? 'login' : 'register')}
-                  disabled={loading}
-                  className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl border border-cinema-border bg-cinema-elevated hover:bg-cinema-border/60 hover:border-text-secondary/40 text-text-primary font-medium text-sm transition-all shadow-sm"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 23 23">
-                    <path fill="#f35325" d="M1 1h10v10H1z" />
-                    <path fill="#81bc06" d="M12 1h10v10H12z" />
-                    <path fill="#05a6f0" d="M1 12h10v10H1z" />
-                    <path fill="#ffba08" d="M12 12h10v10H12z" />
-                  </svg>
-                  <span>{mode === 'login' ? 'Continue with Microsoft' : 'Register with Microsoft'}</span>
-                </button>
+                {/* "or" divider and Google login under the normal form */}
+                <div className="space-y-3">
+                  <div className="relative flex items-center justify-center my-1">
+                    <div className="border-t border-cinema-border w-full" />
+                    <span className="bg-cinema-card px-3 text-xs font-semibold text-text-muted uppercase tracking-wider">
+                      or
+                    </span>
+                  </div>
 
-                <div className="relative flex items-center justify-center my-3">
-                  <div className="border-t border-cinema-border w-full" />
-                  <span className="bg-cinema-card px-3 text-xs font-semibold text-text-muted uppercase tracking-wider">
-                    Or with Email
-                  </span>
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={handleGoogleClick}
+                      disabled={loading}
+                      className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl border border-cinema-border bg-cinema-elevated hover:bg-cinema-card hover:border-accent-primary/40 text-text-primary font-medium text-sm transition-all duration-200 shadow-sm active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none group"
+                    >
+                      <svg className="w-4 h-4 flex-shrink-0 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
+                        <path
+                          fill="#4285F4"
+                          d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3.03h3.88c2.27-2.09 3.66-5.17 3.66-9.12z"
+                        />
+                        <path
+                          fill="#34A853"
+                          d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.03c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.24v3.13C3.26 21.36 7.33 24 12 24z"
+                        />
+                        <path
+                          fill="#FBBC05"
+                          d="M5.28 14.29c-.25-.72-.38-1.49-.38-2.29s.13-1.57.38-2.29V6.58H1.24C.45 8.15 0 9.97 0 12s.45 3.85 1.24 5.42l4.04-3.13z"
+                        />
+                        <path
+                          fill="#EA4335"
+                          d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.24 6.58l4.04 3.13c.95-2.83 3.6-4.96 6.72-4.96z"
+                        />
+                      </svg>
+                      <span>{loading ? 'Connecting with Google...' : 'Sign in with Google'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => openSocialPrompt('microsoft', 'login')}
+                      disabled={loading}
+                      className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl border border-cinema-border bg-cinema-elevated hover:bg-cinema-card hover:border-text-secondary/40 text-text-primary font-medium text-sm transition-all duration-200 shadow-sm active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none group"
+                    >
+                      <svg className="w-4 h-4 flex-shrink-0 transition-transform group-hover:scale-110" viewBox="0 0 23 23">
+                        <path fill="#f35325" d="M1 1h10v10H1z" />
+                        <path fill="#81bc06" d="M12 1h10v10H12z" />
+                        <path fill="#05a6f0" d="M1 12h10v10H1z" />
+                        <path fill="#ffba08" d="M12 12h10v10H12z" />
+                      </svg>
+                      <span>Continue with Microsoft</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* 1. SIGN IN FORM */}
-            {mode === 'login' && (
-              <form onSubmit={handleEmailLogin} className="space-y-3.5">
-                <Input
-                  label="Email Address"
-                  type="email"
-                  placeholder="e.g. alex@cinebook.com"
-                  value={loginEmail}
-                  onChange={e => {
-                    setLoginEmail(e.target.value);
-                    if (loginEmailError) setLoginEmailError('');
-                    if (error) setError(null);
-                    if (isNotRegistered) setIsNotRegistered(false);
-                  }}
-                  error={loginEmailError}
-                  required
-                />
-                <Input
-                  label="Password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={loginPassword}
-                  onChange={e => {
-                    setLoginPassword(e.target.value);
-                    if (loginPasswordError) setLoginPasswordError('');
-                    if (error) setError(null);
-                  }}
-                  error={loginPasswordError}
-                  required
-                />
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? 'Signing In...' : 'Sign In'}
-                </Button>
-              </form>
-            )}
-
             {/* 2. REGISTRATION FORM (STEP 1) */}
             {mode === 'register' && (
-              <form onSubmit={handleStartRegistration} className="space-y-3">
-                <Input
-                  label="Full Name"
-                  placeholder="e.g. Daham Bhanuka"
-                  value={registerName}
-                  onChange={e => {
-                    setRegisterName(e.target.value);
-                    if (registerNameError) setRegisterNameError('');
-                    if (error) setError(null);
-                  }}
-                  error={registerNameError}
-                  required
-                />
-                <Input
-                  label="Email Address"
-                  type="email"
-                  placeholder="e.g. yourname@gmail.com"
-                  value={registerEmail}
-                  onChange={e => {
-                    setRegisterEmail(e.target.value);
-                    if (registerEmailError) setRegisterEmailError('');
-                    if (error) setError(null);
-                  }}
-                  error={registerEmailError}
-                  required
-                />
-                <Input
-                  label="Mobile Phone Number"
-                  type="tel"
-                  placeholder="e.g. +94 77 123 4567"
-                  value={registerPhone}
-                  onChange={e => {
-                    setRegisterPhone(e.target.value);
-                    if (registerPhoneError) setRegisterPhoneError('');
-                    if (error) setError(null);
-                  }}
-                  error={registerPhoneError}
-                />
+              <div className="space-y-4">
+                <form onSubmit={handleStartRegistration} className="space-y-3">
+                  <Input
+                    label="Full Name"
+                    placeholder="e.g. Daham Bhanuka"
+                    value={registerName}
+                    onChange={e => {
+                      setRegisterName(e.target.value);
+                      if (registerNameError) setRegisterNameError('');
+                      if (error) setError(null);
+                    }}
+                    error={registerNameError}
+                    required
+                  />
+                  <Input
+                    label="Email Address"
+                    type="email"
+                    placeholder="e.g. yourname@gmail.com"
+                    value={registerEmail}
+                    onChange={e => {
+                      setRegisterEmail(e.target.value);
+                      if (registerEmailError) setRegisterEmailError('');
+                      if (error) setError(null);
+                    }}
+                    error={registerEmailError}
+                    required
+                  />
+                  <Input
+                    label="Mobile Phone Number"
+                    type="tel"
+                    placeholder="e.g. +94 77 123 4567"
+                    value={registerPhone}
+                    onChange={e => {
+                      setRegisterPhone(e.target.value);
+                      if (registerPhoneError) setRegisterPhoneError('');
+                      if (error) setError(null);
+                    }}
+                    error={registerPhoneError}
+                  />
 
-                {/* OTP verification channel preference */}
-                <div>
-                  <label className="text-xs font-medium text-text-secondary block mb-1.5">
-                    Send Verification Code Via
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
+                  {/* OTP verification channel preference */}
+                  <div>
+                    <label className="text-xs font-medium text-text-secondary block mb-1.5">
+                      Send Verification Code Via
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setOtpType('email')}
+                        className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium border transition-all ${
+                          otpType === 'email'
+                            ? 'border-accent-primary bg-accent-primary/10 text-accent-primary font-semibold'
+                            : 'border-cinema-border bg-cinema-elevated text-text-muted hover:text-text-primary'
+                        }`}
+                      >
+                        <Mail className="w-3.5 h-3.5" /> Email OTP
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setOtpType('phone')}
+                        className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium border transition-all ${
+                          otpType === 'phone'
+                            ? 'border-accent-primary bg-accent-primary/10 text-accent-primary font-semibold'
+                            : 'border-cinema-border bg-cinema-elevated text-text-muted hover:text-text-primary'
+                        }`}
+                      >
+                        <Phone className="w-3.5 h-3.5" /> Mobile SMS
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <Input
+                      label="Password"
+                      type="password"
+                      placeholder="6+ chars"
+                      value={registerPassword}
+                      onChange={e => {
+                        setRegisterPassword(e.target.value);
+                        if (registerPasswordError) setRegisterPasswordError('');
+                        if (error) setError(null);
+                      }}
+                      error={registerPasswordError}
+                      required
+                    />
+                    <Input
+                      label="Confirm Password"
+                      type="password"
+                      placeholder="Match password"
+                      value={registerConfirmPassword}
+                      onChange={e => {
+                        setRegisterConfirmPassword(e.target.value);
+                        if (registerConfirmPasswordError) setRegisterConfirmPasswordError('');
+                        if (error) setError(null);
+                      }}
+                      error={registerConfirmPasswordError}
+                      required
+                    />
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-accent-primary/5 border border-accent-primary/20 flex items-center gap-2 text-xs text-text-secondary">
+                    <Sparkles className="w-4 h-4 text-accent-primary flex-shrink-0" />
+                    <span>Get <strong>100 bonus loyalty points</strong> upon registration!</span>
+                  </div>
+
+                  <Button type="submit" className="w-full mt-2" disabled={loading}>
+                    {loading ? 'Sending Code...' : 'Send Verification Code'}
+                  </Button>
+                </form>
+
+                {/* "or" divider and Google registration under the normal form */}
+                <div className="space-y-3">
+                  <div className="relative flex items-center justify-center my-1">
+                    <div className="border-t border-cinema-border w-full" />
+                    <span className="bg-cinema-card px-3 text-xs font-semibold text-text-muted uppercase tracking-wider">
+                      or
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
                     <button
                       type="button"
-                      onClick={() => setOtpType('email')}
-                      className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium border transition-all ${
-                        otpType === 'email'
-                          ? 'border-accent-primary bg-accent-primary/10 text-accent-primary font-semibold'
-                          : 'border-cinema-border bg-cinema-elevated text-text-muted hover:text-text-primary'
-                      }`}
+                      onClick={handleGoogleClick}
+                      disabled={loading}
+                      className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl border border-cinema-border bg-cinema-elevated hover:bg-cinema-card hover:border-accent-primary/40 text-text-primary font-medium text-sm transition-all duration-200 shadow-sm active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none group"
                     >
-                      <Mail className="w-3.5 h-3.5" /> Email OTP
+                      <svg className="w-4 h-4 flex-shrink-0 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
+                        <path
+                          fill="#4285F4"
+                          d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3.03h3.88c2.27-2.09 3.66-5.17 3.66-9.12z"
+                        />
+                        <path
+                          fill="#34A853"
+                          d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.03c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.24v3.13C3.26 21.36 7.33 24 12 24z"
+                        />
+                        <path
+                          fill="#FBBC05"
+                          d="M5.28 14.29c-.25-.72-.38-1.49-.38-2.29s.13-1.57.38-2.29V6.58H1.24C.45 8.15 0 9.97 0 12s.45 3.85 1.24 5.42l4.04-3.13z"
+                        />
+                        <path
+                          fill="#EA4335"
+                          d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.24 6.58l4.04 3.13c.95-2.83 3.6-4.96 6.72-4.96z"
+                        />
+                      </svg>
+                      <span>{loading ? 'Connecting with Google...' : 'Sign up with Google'}</span>
                     </button>
+
                     <button
                       type="button"
-                      onClick={() => setOtpType('phone')}
-                      className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium border transition-all ${
-                        otpType === 'phone'
-                          ? 'border-accent-primary bg-accent-primary/10 text-accent-primary font-semibold'
-                          : 'border-cinema-border bg-cinema-elevated text-text-muted hover:text-text-primary'
-                      }`}
+                      onClick={() => openSocialPrompt('microsoft', 'register')}
+                      disabled={loading}
+                      className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl border border-cinema-border bg-cinema-elevated hover:bg-cinema-card hover:border-text-secondary/40 text-text-primary font-medium text-sm transition-all duration-200 shadow-sm active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none group"
                     >
-                      <Phone className="w-3.5 h-3.5" /> Mobile SMS
+                      <svg className="w-4 h-4 flex-shrink-0 transition-transform group-hover:scale-110" viewBox="0 0 23 23">
+                        <path fill="#f35325" d="M1 1h10v10H1z" />
+                        <path fill="#81bc06" d="M12 1h10v10H12z" />
+                        <path fill="#05a6f0" d="M1 12h10v10H1z" />
+                        <path fill="#ffba08" d="M12 12h10v10H12z" />
+                      </svg>
+                      <span>Register with Microsoft</span>
                     </button>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <Input
-                    label="Password"
-                    type="password"
-                    placeholder="6+ chars"
-                    value={registerPassword}
-                    onChange={e => {
-                      setRegisterPassword(e.target.value);
-                      if (registerPasswordError) setRegisterPasswordError('');
-                      if (error) setError(null);
-                    }}
-                    error={registerPasswordError}
-                    required
-                  />
-                  <Input
-                    label="Confirm Password"
-                    type="password"
-                    placeholder="Match password"
-                    value={registerConfirmPassword}
-                    onChange={e => {
-                      setRegisterConfirmPassword(e.target.value);
-                      if (registerConfirmPasswordError) setRegisterConfirmPasswordError('');
-                      if (error) setError(null);
-                    }}
-                    error={registerConfirmPasswordError}
-                    required
-                  />
-                </div>
-
-                <div className="p-2.5 rounded-xl bg-accent-primary/5 border border-accent-primary/20 flex items-center gap-2 text-xs text-text-secondary">
-                  <Sparkles className="w-4 h-4 text-accent-primary flex-shrink-0" />
-                  <span>Get <strong>100 bonus loyalty points</strong> upon registration!</span>
-                </div>
-
-                <Button type="submit" className="w-full mt-2" disabled={loading}>
-                  {loading ? 'Sending Code...' : 'Send Verification Code'}
-                </Button>
-              </form>
+              </div>
             )}
 
             {/* 3. OTP VERIFICATION FORM (STEP 2) */}

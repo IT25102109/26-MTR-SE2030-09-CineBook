@@ -22,6 +22,9 @@ import { UserManagementPage } from '@/pages/UserManagementPage';
 import { NotificationCenterPage } from '@/pages/NotificationCenterPage';
 import { AdminNotificationsPage } from '@/pages/AdminNotificationsPage';
 import { seedData, syncFromBackend } from '@/data/store';
+import { GoogleOAuthProvider } from '@react-oauth/google';
+
+const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 function App() {
   useEffect(() => {
@@ -30,12 +33,13 @@ function App() {
   }, []);
 
   return (
-    <ThemeProvider>
-      <BrowserRouter>
-        <AuthProvider>
-          <ToastProvider>
-            <NotificationProvider>
-            <Layout>
+    <GoogleOAuthProvider clientId={googleClientId}>
+      <ThemeProvider>
+        <BrowserRouter>
+          <AuthProvider>
+            <ToastProvider>
+              <NotificationProvider>
+              <Layout>
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/movies" element={<MoviesPage />} />
@@ -122,6 +126,7 @@ function App() {
       </AuthProvider>
     </BrowserRouter>
     </ThemeProvider>
+    </GoogleOAuthProvider>
   );
 }
 

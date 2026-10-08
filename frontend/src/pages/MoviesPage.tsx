@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { useSearchParams, Navigate } from 'react-router-dom';
+import { useSearchParams, Navigate, Link } from 'react-router-dom';
 import { Search, SlidersHorizontal, MapPin, Sparkles, CalendarDays, RotateCcw, Bookmark } from 'lucide-react';
 import { getMovies, getBranches, getShowtimes, isMovieWishlisted, STORE_EVENTS } from '@/data/store';
 import { useStoreSync } from '@/hooks/useStoreSync';
 import { useAuth } from '@/contexts/AuthContext';
 import { MovieCard } from '@/components/movies/MovieCard';
 import { Select } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
 
 export function MoviesPage() {
   const { user } = useAuth();
@@ -234,7 +235,22 @@ export function MoviesPage() {
         )}
       </div>
 
-      {filtered.length > 0 ? (
+      {statusFilter === 'wishlist' && !user ? (
+        <div className="text-center py-16 bg-cinema-card hairline rounded-2xl max-w-md mx-auto p-8 shadow-xl animate-fade-in">
+          <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500">
+            <Bookmark className="w-7 h-7" />
+          </div>
+          <h2 className="text-xl font-display font-semibold mb-2">Sign in to view your Wishlist</h2>
+          <p className="text-text-secondary text-sm mb-6 leading-relaxed">
+            Your wishlist is saved to your account in our database so you can keep track of films and receive alerts across all your devices.
+          </p>
+          <Link to="/login">
+            <Button size="lg" className="w-full">
+              Sign In or Register
+            </Button>
+          </Link>
+        </div>
+      ) : filtered.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5">
           {filtered.map((movie, i) => (
             <MovieCard key={movie.id} movie={movie} index={i} />
@@ -242,13 +258,31 @@ export function MoviesPage() {
         </div>
       ) : (
         <div className="text-center py-20 bg-cinema-card hairline rounded-2xl">
-          <p className="text-text-muted text-lg mb-2">No movies match your selected filters.</p>
-          <button
-            onClick={clearFilters}
-            className="mt-2 text-accent-primary text-sm hover:underline"
-          >
-            Clear all filters
-          </button>
+          {statusFilter === 'wishlist' ? (
+            <>
+              <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-500">
+                <Bookmark className="w-6 h-6" />
+              </div>
+              <p className="text-text-primary font-medium text-lg mb-1">Your wishlist is empty</p>
+              <p className="text-text-muted text-sm mb-4">Click the bookmark icon on any movie to save it to your wishlist.</p>
+              <button
+                onClick={() => setStatusFilter('all')}
+                className="text-accent-primary text-sm font-semibold hover:underline"
+              >
+                Browse All Movies
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-text-muted text-lg mb-2">No movies match your selected filters.</p>
+              <button
+                onClick={clearFilters}
+                className="mt-2 text-accent-primary text-sm hover:underline"
+              >
+                Clear all filters
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>

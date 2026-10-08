@@ -69,4 +69,22 @@ public class AuthController {
             ));
         }
     }
+
+    @PostMapping("/google")
+    public ResponseEntity<?> loginWithGoogle(@RequestBody GoogleLoginRequest request) {
+        try {
+            AuthResponse response = authService.loginWithGoogle(request);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | SecurityException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                    "success", false,
+                    "message", e.getMessage() != null ? e.getMessage() : "Google authentication failed."
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                    "success", false,
+                    "message", "Google authentication failed: " + (e.getMessage() != null ? e.getMessage() : "Invalid token.")
+            ));
+        }
+    }
 }

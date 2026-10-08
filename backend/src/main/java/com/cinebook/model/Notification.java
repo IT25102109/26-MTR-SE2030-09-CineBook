@@ -39,7 +39,7 @@ public class Notification {
     private String link;
 
     @Column(length = 50)
-    private String audience = "all";
+    private String audience;
 
     @Column(name = "audience_target", length = 100)
     private String audienceTarget;
@@ -108,6 +108,11 @@ public class Notification {
         this.read = read;
     }
 
+    @JsonSetter("isRead")
+    public void setJsonIsRead(boolean isRead) {
+        this.read = isRead;
+    }
+
     @JsonProperty("createdAt")
     public String getJsonCreatedAt() {
         return createdAt != null ? createdAt.toString() : null;
@@ -132,8 +137,14 @@ public class Notification {
         if (status == null || status.isBlank()) {
             status = "sent";
         }
-        if (audience == null || audience.isBlank()) {
-            audience = "all";
+        if (userId == null) {
+            if (audience == null || audience.isBlank()) {
+                audience = "all";
+            }
+        } else {
+            if (audience == null || audience.isBlank() || "all".equalsIgnoreCase(audience)) {
+                audience = "user";
+            }
         }
     }
 }

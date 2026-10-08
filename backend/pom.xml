@@ -46,6 +46,18 @@
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
 
+        <!-- Google API Client for verifying Google ID Tokens (OAuth2 / OpenID Connect) -->
+        <dependency>
+            <groupId>com.google.api-client</groupId>
+            <artifactId>google-api-client</artifactId>
+            <version>2.7.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.http-client</groupId>
+            <artifactId>google-http-client-gson</artifactId>
+            <version>1.45.0</version>
+        </dependency>
+
         <!-- Security + JWT-ready auth, needed for the RBAC hierarchy
              (Admin > Cinema Manager > Customer). Kept in but not yet
              wired up — safe to configure permissively until the auth

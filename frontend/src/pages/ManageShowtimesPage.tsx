@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, Search, Trash2, Calendar, Clock, Film, MapPin, Tag, CheckCircle, XCircle, Sparkles, MessageSquare, AlertTriangle, Copy, Shield, Lock, Star } from 'lucide-react';
+import { Plus, Search, Trash2, Calendar, Clock, Film, MapPin, Tag, CheckCircle, XCircle, Sparkles, MessageSquare, AlertTriangle, Copy, Shield, Lock, Star, ChevronDown, ChevronUp, Layers, LayoutList, ChevronsUpDown } from 'lucide-react';
 import { getShowtimes, getMovies, getBranches, saveShowtime, deleteShowtime, getPromotions, savePromotion, deletePromotion, getAllReviewsForModeration, updateReviewStatus, deleteReview, STORE_EVENTS } from '@/data/store';
 import { useStoreSync } from '@/hooks/useStoreSync';
 import { useAuth } from '@/contexts/AuthContext';
@@ -66,6 +66,11 @@ export function ManageShowtimesPage() {
   const [cloneSourceDate, setCloneSourceDate] = useState(new Date().toISOString().split('T')[0]);
   const [cloneTargetDays, setCloneTargetDays] = useState(1);
   const [cloneBranchId, setCloneBranchId] = useState(initialBranchId);
+
+  // View mode & Film Accordion categorization states
+  const [viewMode, setViewMode] = useState<'byFilm' | 'table'>('byFilm');
+  const [expandedMovieIds, setExpandedMovieIds] = useState<Set<string>>(() => new Set());
+  const [includeUnscheduled, setIncludeUnscheduled] = useState(false);
 
   // Add Showtime form & multi-slot state
   const [modalGenreFilter, setModalGenreFilter] = useState('all');
@@ -281,6 +286,195 @@ export function ManageShowtimesPage() {
     return b?.halls.find(h => h.id === hallId)?.name || 'Unknown';
   };
 
+  // Group showtimes by movie for the categorized view
+  const movieGroups = useMemo(() => {
+    // Collect candidate movies based on search, movieFilter, and genreFilter
+    const candidates = movies.filter(m => {
+      if (movieFilter !== 'all' && m.id !== movieFilter) return false;
+      if (genreFilter !== 'all' && !m.genre?.includes(genreFilter)) return false;
+      if (search.trim()) {
+        const query = search.toLowerCase().trim();
+        const matchesTitle = m.title.toLowerCase().includes(query);
+        const matchesDirector = (m.director || '').toLowerCase().includes(query);
+        if (!matchesTitle && !matchesDirector) return false;
+      }
+      return true;
+    });
+
+    const groups: Array<{
+      movie: typeof movies[0];
+      showtimes: Showtime[];
+      uniqueBranches: Array<{ id: string; name: string }>;
+      totalBookedSeats: number;
+      dateGroups: Array<{ date: string; slots: Showtime[] }>;
+    }> = [];
+
+    const processedMovieIds = new Set<string>();
+
+    candidates.forEach(movie => {
+      processedMovieIds.add(movie.id);
+      const movieShows = showtimes
+        .filter(s => {
+          if (s.movieId !== movie.id) return false;
+          if (branchFilter !== 'all' && s.branchId !== branchFilter) return false;
+          return true;
+        })
+        .sort((a, b) => {
+          if (a.date !== b.date) return a.date.localeCompare(b.date);
+          return parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time);
+        });
+
+      const branchMap = new Map<string, string>();
+      movieShows.forEach(s => {
+        const b = branches.find(br => br.id === s.branchId);
+        if (b) branchMap.set(b.id, b.name);
+      });
+
+      const totalBookedSeats = movieShows.reduce((sum, s) => sum + (s.bookedSeats?.length || 0), 0);
+
+      const dateMap = new Map<string, Showtime[]>();
+      movieShows.forEach(s => {
+        if (!dateMap.has(s.date)) dateMap.set(s.date, []);
+        dateMap.get(s.date)!.push(s);
+      });
+      const dateGroups = Array.from(dateMap.entries()).map(([date, slots]) => ({
+        date,
+        slots,
+      }));
+
+      groups.push({
+        movie,
+        showtimes: movieShows,
+        uniqueBranches: Array.from(branchMap.entries()).map(([id, name]) => ({ id, name })),
+        totalBookedSeats,
+        dateGroups,
+      });
+    });
+
+    // Check for any orphan showtimes with unknown movieId
+    showtimes.forEach(s => {
+      if (branchFilter !== 'all' && s.branchId !== branchFilter) return;
+      if (!processedMovieIds.has(s.movieId) && !movies.some(m => m.id === s.movieId)) {
+        processedMovieIds.add(s.movieId);
+        const orphanShows = showtimes
+          .filter(os => os.movieId === s.movieId && (branchFilter === 'all' || os.branchId === branchFilter))
+          .sort((a, b) => {
+            if (a.date !== b.date) return a.date.localeCompare(b.date);
+            return parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time);
+          });
+        const syntheticMovie: typeof movies[0] = {
+          id: s.movieId,
+          title: `Movie #${s.movieId}`,
+          synopsis: '',
+          poster: '',
+          backdrop: '',
+          genre: [],
+          language: 'English',
+          duration: 120,
+          rating: 0,
+          certification: 'NR',
+          director: '',
+          cast: [],
+          releaseDate: '',
+          status: 'now-showing',
+          featured: false,
+          trailerUrl: '',
+        };
+        const branchMap = new Map<string, string>();
+        orphanShows.forEach(os => {
+          const b = branches.find(br => br.id === os.branchId);
+          if (b) branchMap.set(b.id, b.name);
+        });
+        const dateMap = new Map<string, Showtime[]>();
+        orphanShows.forEach(os => {
+          if (!dateMap.has(os.date)) dateMap.set(os.date, []);
+          dateMap.get(os.date)!.push(os);
+        });
+        groups.push({
+          movie: syntheticMovie,
+          showtimes: orphanShows,
+          uniqueBranches: Array.from(branchMap.entries()).map(([id, name]) => ({ id, name })),
+          totalBookedSeats: orphanShows.reduce((sum, os) => sum + (os.bookedSeats?.length || 0), 0),
+          dateGroups: Array.from(dateMap.entries()).map(([date, slots]) => ({ date, slots })),
+        });
+      }
+    });
+
+    // Sort: movies with showtimes first (descending count), then alphabetically by title
+    return groups.sort((a, b) => {
+      if (a.showtimes.length > 0 && b.showtimes.length === 0) return -1;
+      if (a.showtimes.length === 0 && b.showtimes.length > 0) return 1;
+      if (a.showtimes.length !== b.showtimes.length) return b.showtimes.length - a.showtimes.length;
+      return a.movie.title.localeCompare(b.movie.title);
+    });
+  }, [movies, showtimes, branches, movieFilter, genreFilter, branchFilter, search]);
+
+  const visibleMovieGroups = useMemo(() => {
+    if (includeUnscheduled) return movieGroups;
+    return movieGroups.filter(g => g.showtimes.length > 0);
+  }, [movieGroups, includeUnscheduled]);
+
+  const moviesWithShowtimesCount = useMemo(() => {
+    return movieGroups.filter(g => g.showtimes.length > 0).length;
+  }, [movieGroups]);
+
+  const unscheduledMoviesCount = useMemo(() => {
+    return movieGroups.filter(g => g.showtimes.length === 0).length;
+  }, [movieGroups]);
+
+  const totalFilteredBookings = useMemo(() => {
+    return filtered.reduce((sum, s) => sum + (s.bookedSeats?.length || 0), 0);
+  }, [filtered]);
+
+  const toggleMovieExpanded = (movieId: string) => {
+    setExpandedMovieIds(prev => {
+      const next = new Set(prev);
+      if (next.has(movieId)) {
+        next.delete(movieId);
+      } else {
+        next.add(movieId);
+      }
+      return next;
+    });
+  };
+
+  const handleExpandAll = () => {
+    setExpandedMovieIds(new Set(visibleMovieGroups.map(g => g.movie.id)));
+  };
+
+  const handleCollapseAll = () => {
+    setExpandedMovieIds(new Set());
+  };
+
+  const isMovieExpanded = (movieId: string) => {
+    if (search.trim().length > 0) return true;
+    if (movieFilter !== 'all' && movieFilter === movieId) return true;
+    return expandedMovieIds.has(movieId);
+  };
+
+  const handleOpenAddModalForMovie = (movieId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      movieId,
+    }));
+    setModalGenreFilter('all');
+    setModalOpen(true);
+  };
+
+  const formatDateHeader = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr + 'T00:00:00');
+      return d.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
   const availableHalls = branches.find(b => b.id === formData.branchId)?.halls || [];
 
   const handleBatchSave = async () => {
@@ -320,6 +514,7 @@ export function ManageShowtimesPage() {
     }
 
     setTick(t => t + 1);
+    setExpandedMovieIds(prev => new Set([...prev, targetMovieId]));
     toast(
       'success',
       `Successfully scheduled ${savedCount} showtime${savedCount > 1 ? 's' : ''}${
@@ -415,114 +610,437 @@ export function ManageShowtimesPage() {
         </div>
       </Card>
 
-      <div className="mb-4 text-sm text-text-secondary">
-        {filtered.length} showtime{filtered.length !== 1 ? 's' : ''} found
+      {/* View Mode & Metrics Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div className="flex items-center gap-3 flex-wrap">
+          <Badge variant="amber" className="text-xs py-1 px-3">
+            <Film className="w-3.5 h-3.5" />
+            <span className="font-semibold">{moviesWithShowtimesCount}</span> {moviesWithShowtimesCount === 1 ? 'Film' : 'Films'} with Screenings
+          </Badge>
+          <Badge variant="blue" className="text-xs py-1 px-3">
+            <Clock className="w-3.5 h-3.5" />
+            <span className="font-semibold">{filtered.length}</span> Total {filtered.length === 1 ? 'Screening' : 'Screenings'}
+          </Badge>
+          <Badge variant="green" className="text-xs py-1 px-3">
+            <CheckCircle className="w-3.5 h-3.5" />
+            <span className="font-semibold">{totalFilteredBookings}</span> Booked Seats
+          </Badge>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* View Mode Toggle */}
+          <div className="flex items-center gap-1 bg-cinema-base p-1 rounded-xl border border-white/10">
+            <button
+              type="button"
+              onClick={() => setViewMode('byFilm')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
+                viewMode === 'byFilm'
+                  ? 'bg-accent-primary text-black font-semibold shadow-soft-sm'
+                  : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>By Film</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
+                viewMode === 'table'
+                  ? 'bg-accent-primary text-black font-semibold shadow-soft-sm'
+                  : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              <LayoutList className="w-3.5 h-3.5" />
+              <span>All Showtimes (Table)</span>
+            </button>
+          </div>
+
+          {/* By Film quick controls */}
+          {viewMode === 'byFilm' && (
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={expandedMovieIds.size >= visibleMovieGroups.length && visibleMovieGroups.length > 0 ? handleCollapseAll : handleExpandAll}
+                className="text-xs text-text-secondary hover:text-text-primary flex items-center gap-1.5 h-8 px-2.5 border border-white/10 hover:border-white/20"
+              >
+                <ChevronsUpDown className="w-3.5 h-3.5" />
+                <span>{expandedMovieIds.size >= visibleMovieGroups.length && visibleMovieGroups.length > 0 ? 'Collapse All' : 'Expand All'}</span>
+              </Button>
+
+              {unscheduledMoviesCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setIncludeUnscheduled(v => !v)}
+                  className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 cursor-pointer ${
+                    includeUnscheduled
+                      ? 'bg-accent-primary/15 text-accent-primary border-accent-primary/30 font-medium'
+                      : 'bg-cinema-base border-white/10 text-text-muted hover:text-text-secondary'
+                  }`}
+                >
+                  <span>{includeUnscheduled ? 'Hide' : 'Show'} Unscheduled ({unscheduledMoviesCount})</span>
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
-      <Table
-        columns={[
-          {
-            key: 'movie',
-            header: 'Movie',
-            render: (s) => {
-              const movie = movies.find(m => m.id === s.movieId);
+      {viewMode === 'byFilm' ? (
+        <div className="space-y-4">
+          {visibleMovieGroups.length === 0 ? (
+            <div className="py-16 text-center bg-cinema-card rounded-2xl border border-cinema-border">
+              <Film className="w-12 h-12 text-text-muted mx-auto mb-3 opacity-40" />
+              <h3 className="text-base font-semibold text-text-primary mb-1">No Screenings Found</h3>
+              <p className="text-sm text-text-secondary max-w-md mx-auto mb-4">
+                No movies match your current search and filter settings. Try adjusting your filters or schedule a new showtime.
+              </p>
+              <Button onClick={() => setModalOpen(true)} className="inline-flex items-center gap-1.5 text-xs">
+                <Plus className="w-4 h-4" /> Add Showtime
+              </Button>
+            </div>
+          ) : (
+            visibleMovieGroups.map(({ movie, showtimes: shows, uniqueBranches, totalBookedSeats, dateGroups }) => {
+              const isExpanded = isMovieExpanded(movie.id);
               return (
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <Film className="w-4 h-4 text-text-muted flex-shrink-0" />
-                    <span className="font-medium">{movie?.title || getMovieTitle(s.movieId)}</span>
+                <Card
+                  key={movie.id}
+                  className="overflow-hidden border border-white/10 hover:border-white/20 transition-all shadow-soft-sm"
+                >
+                  {/* Film Accordion Header */}
+                  <div
+                    onClick={() => toggleMovieExpanded(movie.id)}
+                    className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer hover:bg-white/[0.02] transition-colors select-none"
+                  >
+                    {/* Left: Poster + Film Information */}
+                    <div className="flex items-start gap-4 flex-1 min-w-0">
+                      {movie.poster ? (
+                        <img
+                          src={movie.poster}
+                          alt={movie.title}
+                          className="w-14 h-20 object-cover rounded-xl flex-shrink-0 shadow-md bg-cinema-card border border-white/10"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-14 h-20 rounded-xl bg-cinema-elevated flex items-center justify-center flex-shrink-0 border border-white/10">
+                          <Film className="w-6 h-6 text-text-muted" />
+                        </div>
+                      )}
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-display font-bold text-lg text-text-primary hover:text-accent-primary transition-colors">
+                            {movie.title}
+                          </h3>
+                          {movie.rating > 0 && (
+                            <span className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                              <Star className="w-3 h-3 fill-amber-400" />
+                              {movie.rating.toFixed(1)}
+                            </span>
+                          )}
+                          {movie.certification && (
+                            <Badge variant="outline" className="text-[10px]">
+                              {movie.certification}
+                            </Badge>
+                          )}
+                          <Badge variant={movie.status === 'now-showing' ? 'green' : 'blue'} className="text-[10px]">
+                            {movie.status === 'now-showing' ? 'Now Showing' : 'Coming Soon'}
+                          </Badge>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-xs text-text-secondary mt-1 flex-wrap">
+                          {movie.director && <span>Dir: {movie.director}</span>}
+                          {movie.director && <span>•</span>}
+                          {movie.duration > 0 && <span>{movie.duration} mins</span>}
+                          {movie.language && (
+                            <>
+                              <span>•</span>
+                              <span>{movie.language}</span>
+                            </>
+                          )}
+                          {movie.genre && movie.genre.length > 0 && (
+                            <>
+                              <span>•</span>
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {movie.genre.slice(0, 3).map(g => (
+                                  <span key={g} className="px-1.5 py-0.5 rounded bg-white/5 text-text-muted text-[10px] border border-white/5">
+                                    {g}
+                                  </span>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Screening Count & Stats Pills */}
+                        <div className="flex items-center gap-3 mt-2.5 text-xs flex-wrap">
+                          <span className={`inline-flex items-center gap-1.5 font-semibold ${
+                            shows.length > 0 ? 'text-accent-primary' : 'text-text-muted'
+                          }`}>
+                            <Film className="w-3.5 h-3.5" />
+                            {shows.length} {shows.length === 1 ? 'Screening' : 'Screenings'}
+                          </span>
+
+                          {uniqueBranches.length > 0 && (
+                            <span className="inline-flex items-center gap-1.5 text-text-muted">
+                              <MapPin className="w-3.5 h-3.5" />
+                              {uniqueBranches.length} {uniqueBranches.length === 1 ? 'Branch' : 'Branches'} ({uniqueBranches.map(b => b.name).join(', ')})
+                            </span>
+                          )}
+
+                          {totalBookedSeats > 0 && (
+                            <span className="inline-flex items-center gap-1.5 text-emerald-400 font-medium">
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              {totalBookedSeats} Booked {totalBookedSeats === 1 ? 'Seat' : 'Seats'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Quick Add + Expand Chevron */}
+                    <div className="flex items-center gap-2.5 flex-shrink-0 self-end sm:self-center">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenAddModalForMovie(movie.id);
+                        }}
+                        className="text-xs flex items-center gap-1.5 h-8 px-3 hover:border-accent-primary/50"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-accent-primary" />
+                        <span>Add Showtime</span>
+                      </Button>
+
+                      <div className={`p-2 rounded-xl bg-white/5 text-text-secondary hover:text-text-primary transition-all duration-200 ${
+                        isExpanded ? 'rotate-180 bg-accent-primary/10 text-accent-primary' : ''
+                      }`}>
+                        <ChevronDown className="w-4 h-4" />
+                      </div>
+                    </div>
                   </div>
-                  {movie?.genre && movie.genre.length > 0 && (
-                    <div className="flex flex-wrap gap-1 pl-6">
-                      {movie.genre.slice(0, 3).map(g => (
-                        <span key={g} className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-text-muted border border-white/5">
-                          {g}
-                        </span>
-                      ))}
+
+                  {/* Expanded Screenings Body */}
+                  {isExpanded && (
+                    <div className="p-4 sm:p-5 border-t border-white/5 bg-cinema-base/40 space-y-5">
+                      {shows.length === 0 ? (
+                        <div className="p-8 text-center rounded-xl border border-dashed border-white/10 bg-cinema-card/50">
+                          <Clock className="w-8 h-8 text-text-muted mx-auto mb-2 opacity-40" />
+                          <p className="text-sm text-text-secondary font-medium">
+                            No showtimes currently scheduled for {movie.title}.
+                          </p>
+                          <p className="text-xs text-text-muted mt-1 max-w-sm mx-auto">
+                            Schedule screenings across single or multiple days and halls for this movie.
+                          </p>
+                          <Button
+                            size="sm"
+                            onClick={() => handleOpenAddModalForMovie(movie.id)}
+                            className="mt-4 text-xs inline-flex items-center gap-1.5"
+                          >
+                            <Plus className="w-3.5 h-3.5" /> Schedule First Showtime
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          {dateGroups.map(({ date, slots }) => (
+                            <div key={date} className="space-y-2.5">
+                              <div className="flex items-center justify-between gap-2 border-b border-white/5 pb-1.5">
+                                <div className="flex items-center gap-2 text-xs font-semibold text-text-secondary uppercase tracking-wider">
+                                  <Calendar className="w-3.5 h-3.5 text-accent-primary" />
+                                  <span>{formatDateHeader(date)}</span>
+                                </div>
+                                <span className="text-[11px] text-text-muted">
+                                  {slots.length} screening{slots.length !== 1 ? 's' : ''}
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {slots.map(s => {
+                                  const weekend = isWeekend(s.date);
+                                  const peak = isPeakHour(s.time);
+                                  return (
+                                    <div
+                                      key={s.id}
+                                      className="bg-cinema-card border border-white/10 hover:border-white/20 rounded-xl p-3.5 flex flex-col justify-between gap-3 transition-all hover:shadow-soft-md group"
+                                    >
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-accent-primary/10 text-accent-primary rounded-lg font-mono font-bold text-xs border border-accent-primary/20">
+                                          <Clock className="w-3 h-3" />
+                                          {s.time}
+                                        </div>
+                                        {weekend && peak ? (
+                                          <Badge variant="red" className="text-[10px]">Weekend Peak (+35%)</Badge>
+                                        ) : weekend ? (
+                                          <Badge variant="amber" className="text-[10px]">Weekend (+20%)</Badge>
+                                        ) : peak ? (
+                                          <Badge variant="blue" className="text-[10px]">Peak Hour (+15%)</Badge>
+                                        ) : (
+                                          <Badge variant="default" className="text-[10px]">Standard</Badge>
+                                        )}
+                                      </div>
+
+                                      <div className="space-y-1 text-xs">
+                                        <div className="flex items-center gap-1.5 text-text-primary font-medium">
+                                          <MapPin className="w-3 h-3 text-text-muted flex-shrink-0" />
+                                          <span className="truncate">{getBranchName(s.branchId)}</span>
+                                        </div>
+                                        <div className="text-text-secondary pl-5">
+                                          Hall: <span className="text-text-primary font-medium">{getHallName(s.branchId, s.hallId)}</span>
+                                        </div>
+                                      </div>
+
+                                      <div className="flex items-center justify-between pt-2.5 border-t border-white/5 text-xs">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-accent-primary font-semibold font-mono">${s.basePrice.toFixed(2)}</span>
+                                          <Badge variant={s.bookedSeats.length > 0 ? 'amber' : 'default'} className="text-[10px]">
+                                            {s.bookedSeats.length} booked
+                                          </Badge>
+                                        </div>
+                                        <button
+                                          onClick={() => setDeleteTarget(s)}
+                                          className="p-1.5 text-text-muted hover:text-accent-destructive hover:bg-accent-destructive/10 transition-colors rounded-lg cursor-pointer"
+                                          title="Delete showtime"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+
+                          <div className="pt-2 flex justify-between items-center text-xs text-text-muted border-t border-white/5">
+                            <span>Showing {shows.length} screenings across {dateGroups.length} day{dateGroups.length !== 1 ? 's' : ''}</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleOpenAddModalForMovie(movie.id)}
+                              className="text-xs text-accent-primary hover:bg-accent-primary/10 flex items-center gap-1 h-7 px-2"
+                            >
+                              <Plus className="w-3.5 h-3.5" /> Add more showtimes for {movie.title}
+                            </Button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
-                </div>
+                </Card>
               );
+            })
+          )}
+        </div>
+      ) : (
+        <Table
+          columns={[
+            {
+              key: 'movie',
+              header: 'Movie',
+              render: (s) => {
+                const movie = movies.find(m => m.id === s.movieId);
+                return (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Film className="w-4 h-4 text-text-muted flex-shrink-0" />
+                      <span className="font-medium">{movie?.title || getMovieTitle(s.movieId)}</span>
+                    </div>
+                    {movie?.genre && movie.genre.length > 0 && (
+                      <div className="flex flex-wrap gap-1 pl-6">
+                        {movie.genre.slice(0, 3).map(g => (
+                          <span key={g} className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-text-muted border border-white/5">
+                            {g}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              },
             },
-          },
-          {
-            key: 'branch',
-            header: 'Branch',
-            render: (s) => (
-              <span className="text-text-secondary">{getBranchName(s.branchId)}</span>
-            ),
-          },
-          {
-            key: 'hall',
-            header: 'Hall',
-            render: (s) => <span className="text-text-secondary">{getHallName(s.branchId, s.hallId)}</span>,
-          },
-          {
-            key: 'date',
-            header: 'Date',
-            render: (s) => (
-              <span className="flex items-center gap-1.5 text-text-secondary">
-                <Calendar className="w-3.5 h-3.5" />
-                {new Date(s.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-              </span>
-            ),
-          },
-          {
-            key: 'time',
-            header: 'Time',
-            render: (s) => (
-              <span className="flex items-center gap-1.5 text-text-secondary">
-                <Clock className="w-3.5 h-3.5" />
-                {s.time}
-              </span>
-            ),
-          },
-          {
-            key: 'seats',
-            header: 'Booked',
-            render: (s) => (
-              <Badge variant={s.bookedSeats.length > 0 ? 'amber' : 'default'}>
-                {s.bookedSeats.length} seats
-              </Badge>
-            ),
-          },
-          {
-            key: 'pricingTier',
-            header: 'Pricing Mode',
-            render: (s) => {
-              const weekend = isWeekend(s.date);
-              const peak = isPeakHour(s.time);
-              if (weekend && peak) {
-                return <Badge variant="red">Weekend Peak (+35%)</Badge>;
-              } else if (weekend) {
-                return <Badge variant="amber">Weekend (+20%)</Badge>;
-              } else if (peak) {
-                return <Badge variant="blue">Peak Hour (+15%)</Badge>;
-              }
-              return <Badge variant="default">Standard</Badge>;
+            {
+              key: 'branch',
+              header: 'Branch',
+              render: (s) => (
+                <span className="text-text-secondary">{getBranchName(s.branchId)}</span>
+              ),
             },
-          },
-          {
-            key: 'price',
-            header: 'Price',
-            render: (s) => <span className="text-accent-primary font-medium">${s.basePrice}</span>,
-          },
-          {
-            key: 'actions',
-            header: '',
-            render: (s) => (
-              <button
-                onClick={() => setDeleteTarget(s)}
-                className="text-text-muted hover:text-accent-destructive transition-colors p-1"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            ),
-          },
-        ]}
-        data={filtered}
-        emptyMessage="No showtimes found. Add one to get started."
-      />
+            {
+              key: 'hall',
+              header: 'Hall',
+              render: (s) => <span className="text-text-secondary">{getHallName(s.branchId, s.hallId)}</span>,
+            },
+            {
+              key: 'date',
+              header: 'Date',
+              render: (s) => (
+                <span className="flex items-center gap-1.5 text-text-secondary">
+                  <Calendar className="w-3.5 h-3.5" />
+                  {new Date(s.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                </span>
+              ),
+            },
+            {
+              key: 'time',
+              header: 'Time',
+              render: (s) => (
+                <span className="flex items-center gap-1.5 text-text-secondary">
+                  <Clock className="w-3.5 h-3.5" />
+                  {s.time}
+                </span>
+              ),
+            },
+            {
+              key: 'seats',
+              header: 'Booked',
+              render: (s) => (
+                <Badge variant={s.bookedSeats.length > 0 ? 'amber' : 'default'}>
+                  {s.bookedSeats.length} seats
+                </Badge>
+              ),
+            },
+            {
+              key: 'pricingTier',
+              header: 'Pricing Mode',
+              render: (s) => {
+                const weekend = isWeekend(s.date);
+                const peak = isPeakHour(s.time);
+                if (weekend && peak) {
+                  return <Badge variant="red">Weekend Peak (+35%)</Badge>;
+                } else if (weekend) {
+                  return <Badge variant="amber">Weekend (+20%)</Badge>;
+                } else if (peak) {
+                  return <Badge variant="blue">Peak Hour (+15%)</Badge>;
+                }
+                return <Badge variant="default">Standard</Badge>;
+              },
+            },
+            {
+              key: 'price',
+              header: 'Price',
+              render: (s) => <span className="text-accent-primary font-medium">${s.basePrice}</span>,
+            },
+            {
+              key: 'actions',
+              header: '',
+              render: (s) => (
+                <button
+                  onClick={() => setDeleteTarget(s)}
+                  className="text-text-muted hover:text-accent-destructive transition-colors p-1"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              ),
+            },
+          ]}
+          data={filtered}
+          emptyMessage="No showtimes found. Add one to get started."
+        />
+      )}
 
       {/* Add Showtime Modal */}
       <Modal

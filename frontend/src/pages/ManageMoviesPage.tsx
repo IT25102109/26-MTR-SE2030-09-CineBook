@@ -201,7 +201,7 @@ export function ManageMoviesPage() {
     };
 
     try {
-      saveMovie(movieToSave);
+      await saveMovie(movieToSave);
       setModalOpen(false);
       setFormError('');
       toast('success', editing ? 'Movie updated successfully' : 'Movie added successfully');
@@ -217,13 +217,14 @@ export function ManageMoviesPage() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      deleteMovie(deleteTarget.id);
+      await deleteMovie(deleteTarget.id);
       setDeleteTarget(null);
       toast('success', 'Movie deleted');
       await loadMovies();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error deleting movie:', err);
-      toast('error', 'Failed to delete movie');
+      const msg = err?.message || 'Failed to delete movie';
+      toast('error', msg);
     }
   };
 

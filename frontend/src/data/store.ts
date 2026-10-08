@@ -164,13 +164,7 @@ export async function syncFromBackend(): Promise<void> {
 
     const currentUser = getCurrentUser();
     if (currentUser?.id) {
-      wishlistApi.getWishlist(currentUser.id).then(items => {
-        if (items && items.length > 0) {
-          const all = JSON.parse(localStorage.getItem(KEYS.wishlist) || '{}');
-          all[currentUser.id] = items;
-          localStorage.setItem(KEYS.wishlist, JSON.stringify(all));
-        }
-      }).catch(err => console.warn('Wishlist sync failed:', err));
+      syncUserWishlist(currentUser.id).catch(err => console.warn('Wishlist sync failed:', err));
 
       loyaltyVoucherApi.getUserVouchers(currentUser.id).then(vouchers => {
         if (vouchers && vouchers.length > 0) {
@@ -223,7 +217,7 @@ export function getMovie(id: string): Movie | undefined {
   return getMovies().find(m => m.id === id);
 }
 
-export function saveMovie(movie: Movie): void {
+export async function saveMovie(movie: Movie): Promise<Movie> {
   const movies = getMovies();
   const normalizedTitle = (movie.title || '').trim().toLowerCase();
   const idx = movies.findIndex(m => m.id === movie.id);
@@ -234,12 +228,30 @@ export function saveMovie(movie: Movie): void {
     if (isDuplicate) {
       throw new Error(`A movie with title "${movie.title.trim()}" already exists!`);
     }
-    movies[idx] = movie;
-    write(KEYS.movies, movies);
+
+    let savedMovie = { ...movie };
+    try {
+      const updated = await movieApi.updateMovie(movie.id, movie);
+      if (updated) {
+        savedMovie = updated;
+      }
+    } catch (err: any) {
+      console.warn('API updateMovie failed:', err);
+      if (err?.status === 409 || err?.status === 400) {
+        throw new Error(err.message || 'Validation error while updating movie');
+      }
+    }
+
+    const current = getMovies();
+    const currentIdx = current.findIndex(m => m.id === movie.id);
+    if (currentIdx >= 0) {
+      current[currentIdx] = savedMovie;
+    } else {
+      current.push(savedMovie);
+    }
+    write(KEYS.movies, current);
     emitStoreEvent(STORE_EVENTS.movies);
-    movieApi.updateMovie(movie.id, movie).catch(err =>
-      console.warn('API updateMovie sync failed, changes kept locally:', err)
-    );
+    return savedMovie;
   } else {
     const isDuplicate = movies.some(
       m => (m.title || '').trim().toLowerCase() === normalizedTitle
@@ -247,31 +259,42 @@ export function saveMovie(movie: Movie): void {
     if (isDuplicate) {
       throw new Error(`A movie with title "${movie.title.trim()}" already exists!`);
     }
-    const localId = movie.id || `m${Date.now()}`;
-    const toSave = { ...movie, id: localId };
-    movies.unshift(toSave);
-    write(KEYS.movies, movies);
-    emitStoreEvent(STORE_EVENTS.movies);
-    movieApi.createMovie(movie).then(created => {
-      if (created.id && created.id !== localId) {
-        const current = getMovies();
-        const item = current.find(m => m.id === localId);
-        if (item) item.id = created.id;
-        write(KEYS.movies, current);
-        emitStoreEvent(STORE_EVENTS.movies);
+
+    let savedMovie = { ...movie };
+    try {
+      const created = await movieApi.createMovie(movie);
+      if (created && created.id) {
+        savedMovie = created;
       }
-    }).catch(err =>
-      console.warn('API createMovie sync failed, changes kept locally:', err)
-    );
+    } catch (err: any) {
+      console.error('API createMovie failed:', err);
+      if (err?.status === 409 || err?.status === 400) {
+        throw new Error(err.message || 'Validation error while creating movie');
+      }
+      if (!savedMovie.id) {
+        savedMovie.id = `m${Date.now()}`;
+      }
+    }
+
+    const current = getMovies();
+    current.unshift(savedMovie);
+    write(KEYS.movies, current);
+    emitStoreEvent(STORE_EVENTS.movies);
+    return savedMovie;
   }
 }
 
-export function deleteMovie(id: string): void {
+export async function deleteMovie(id: string): Promise<void> {
+  try {
+    await movieApi.deleteMovie(id);
+  } catch (err: any) {
+    console.warn('API deleteMovie sync failed:', err);
+    if (err?.status === 400 || err?.status === 409) {
+      throw new Error(err.message || 'Failed to delete movie');
+    }
+  }
   write(KEYS.movies, getMovies().filter(m => m.id !== id));
   emitStoreEvent(STORE_EVENTS.movies);
-  movieApi.deleteMovie(id).catch(err =>
-    console.warn('API deleteMovie sync failed, deletion kept locally:', err)
-  );
 }
 
 // Branches
@@ -354,6 +377,33 @@ export async function saveShowtime(showtime: Showtime): Promise<Showtime> {
     showtimes.push(toSave);
     write(KEYS.showtimes, showtimes);
     emitStoreEvent(STORE_EVENTS.showtimes);
+    // Notify users who wishlisted this movie
+    try {
+      const allWishlists = JSON.parse(localStorage.getItem(KEYS.wishlist) || '{}');
+      const movie = getMovie(showtime.movieId);
+      const movieTitle = movie ? movie.title : 'Movie';
+      const hall = getHall(showtime.branchId, showtime.hallId);
+      const hallName = hall ? hall.name : '';
+
+      Object.entries(allWishlists).forEach(([userId, movieIds]) => {
+        if (Array.isArray(movieIds) && movieIds.includes(showtime.movieId)) {
+          saveNotification({
+            id: `n_wl_${Date.now()}_${userId}`,
+            type: 'showtime_reminder',
+            title: `Showtimes Open: ${movieTitle}`,
+            message: `New showtime scheduled for "${movieTitle}" on ${showtime.date} at ${showtime.time}${hallName ? ` (${hallName})` : ''}. Book your seats now!`,
+            userId,
+            read: false,
+            createdAt: new Date().toISOString(),
+            link: `/movies/${showtime.movieId}`,
+            status: 'sent',
+          });
+        }
+      });
+    } catch (err) {
+      console.warn('Error dispatching wishlist showtime notifications:', err);
+    }
+
     try {
       const created = await showtimeApi.createShowtime(showtime);
       if (created.id && created.id !== localId) {
@@ -803,6 +853,7 @@ export function loginAsRole(role: Role): User {
   const allUsers = getUsers();
   const user = allUsers.find(u => u.role === role) || mockUsers.find(u => u.role === role)!;
   setCurrentUser(user);
+  syncUserWishlist(user.id).catch(err => console.warn('Wishlist sync failed on loginAsRole:', err));
   return user;
 }
 
@@ -901,6 +952,7 @@ export async function loginUserInStore(req: LoginRequest): Promise<User> {
       write(KEYS.users, curUsers);
       emitStoreEvent(STORE_EVENTS.users);
       setCurrentUser(authRes.user);
+      syncUserWishlist(authRes.user.id).catch(err => console.warn('Wishlist sync failed on login:', err));
       return authRes.user;
     }
   } catch (err: any) {
@@ -951,7 +1003,33 @@ export async function loginUserInStore(req: LoginRequest): Promise<User> {
   }
 
   setCurrentUser(existing);
+  syncUserWishlist(existing.id).catch(err => console.warn('Wishlist sync failed on offline login:', err));
   return existing;
+}
+
+export async function loginGoogleInStore(idToken: string): Promise<User> {
+  try {
+    const authRes = await authApi.loginWithGoogle(idToken);
+    if (authRes.user) {
+      const curUsers = getUsers();
+      const existingIdx = curUsers.findIndex(u => u.email.toLowerCase() === authRes.user.email.toLowerCase());
+      if (existingIdx >= 0) {
+        curUsers[existingIdx] = { ...curUsers[existingIdx], ...authRes.user };
+      } else {
+        curUsers.push(authRes.user);
+      }
+      write(KEYS.users, curUsers);
+      emitStoreEvent(STORE_EVENTS.users);
+      setCurrentUser(authRes.user);
+      syncUserWishlist(authRes.user.id).catch(err => console.warn('Wishlist sync failed on Google login:', err));
+      return authRes.user;
+    }
+  } catch (err: any) {
+    console.warn('Backend Google auth error:', err);
+    throw new Error(err.message || 'Google sign-in failed. Please try again.');
+  }
+
+  throw new Error('Google sign-in failed. Please try again.');
 }
 
 export function getHall(branchId: string, hallId: string) {
@@ -974,17 +1052,26 @@ export function getUserNotifications(userId: string): Notification[] {
   const currentUser = allUsers.find(u => u.id === userId) || getCurrentUser();
   const currentRole = currentUser?.role?.toLowerCase();
   const currentBranchId = currentUser?.assignedBranchId;
+  const currentTier = currentUser?.loyaltyTier;
 
   return getNotifications()
     .filter(n => {
       // 1. Direct recipient
-      if (n.userId === userId) return true;
+      if (n.userId && n.userId === userId) return true;
+      // Never show another user's personal direct notifications
+      if (n.userId && n.userId !== userId) return false;
       // 2. Broadcast to all users
       if (n.audience === 'all') return true;
       // 3. Broadcast to specific role (e.g. 'admin', 'cinemamanager', 'customer')
       if (n.audience === 'role' && currentRole && n.audienceTarget?.toLowerCase() === currentRole) return true;
       // 4. Broadcast to specific cinema branch
       if (n.audience === 'branch' && currentBranchId && n.audienceTarget === currentBranchId) return true;
+      // 5. Broadcast to loyalty tier
+      if (n.audience === 'loyaltyTier' && currentTier) {
+        if (n.audienceTarget === 'all_vips') return currentTier === 'Silver' || currentTier === 'Gold' || currentTier === 'Platinum';
+        if (n.audienceTarget === 'gold_platinum') return currentTier === 'Gold' || currentTier === 'Platinum';
+        return currentTier.toLowerCase() === n.audienceTarget?.toLowerCase();
+      }
       return false;
     })
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -992,14 +1079,20 @@ export function getUserNotifications(userId: string): Notification[] {
 
 export function saveNotification(notification: Notification): void {
   const notifications = getNotifications();
-  const existingIdx = notifications.findIndex(n => n.id === notification.id);
+  const audience = notification.audience || (notification.userId ? 'user' : 'all');
+  const normalized: Notification = {
+    ...notification,
+    audience,
+    status: notification.status || 'sent',
+  };
+  const existingIdx = notifications.findIndex(n => n.id === normalized.id);
   if (existingIdx >= 0) {
-    notifications[existingIdx] = notification;
+    notifications[existingIdx] = normalized;
   } else {
-    const localId = notification.id || `n${Date.now()}`;
-    const toSave = { ...notification, id: localId };
+    const localId = normalized.id || `n${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const toSave = { ...normalized, id: localId };
     notifications.unshift(toSave);
-    notificationApi.createNotification(notification).then(created => {
+    notificationApi.createNotification(normalized).then(created => {
       if (created.id && created.id !== localId) {
         const cur = getNotifications();
         const it = cur.find(n => n.id === localId);
@@ -1027,7 +1120,7 @@ export function markNotificationRead(id: string): void {
 export function markAllNotificationsRead(userId: string): void {
   const notifications = getNotifications();
   notifications.forEach(n => {
-    if (n.userId === userId || n.audience === 'all') {
+    if (n.userId === userId) {
       n.read = true;
       if (n.status === 'sent') n.status = 'read';
     }
@@ -1043,10 +1136,10 @@ export function deleteNotification(id: string): void {
   emitStoreEvent(STORE_EVENTS.notifications);
 }
 
-export function broadcastNotification(
+export async function broadcastNotification(
   notification: Omit<Notification, 'id' | 'userId' | 'read' | 'createdAt' | 'status'>,
   targetUserIds: string[]
-): void {
+): Promise<void> {
   const notifications = getNotifications();
   const now = new Date().toISOString();
   targetUserIds.forEach(userId => {
@@ -1061,6 +1154,13 @@ export function broadcastNotification(
   });
   write(KEYS.notifications, notifications);
   emitStoreEvent(STORE_EVENTS.notifications);
+
+  // Send to backend database for permanent persistence across all users
+  try {
+    await notificationApi.broadcastNotification(notification, targetUserIds);
+  } catch (err) {
+    console.warn('API broadcastNotification sync failed, kept locally:', err);
+  }
 }
 
 // Notification Templates
@@ -1375,26 +1475,79 @@ export function isMovieWishlisted(userId: string, movieId: string): boolean {
   return getWishlist(userId).includes(movieId);
 }
 
-export function toggleWishlist(userId: string, movieId: string): boolean {
+export function getWishlistMovies(userId: string): Movie[] {
+  const ids = getWishlist(userId);
+  const allMovies = getMovies();
+  return allMovies.filter(m => ids.includes(m.id));
+}
+
+export async function syncUserWishlist(userId: string): Promise<string[]> {
+  if (!userId) return [];
   try {
+    const items = await wishlistApi.getWishlist(userId);
     const all = JSON.parse(localStorage.getItem(KEYS.wishlist) || '{}');
-    const list: string[] = all[userId] || [];
-    const idx = list.indexOf(movieId);
-    let wishlisted = false;
-    if (idx >= 0) {
-      list.splice(idx, 1);
-      wishlisted = false;
-    } else {
-      list.push(movieId);
-      wishlisted = true;
-    }
-    all[userId] = list;
+    all[userId] = items;
     localStorage.setItem(KEYS.wishlist, JSON.stringify(all));
     emitStoreEvent(STORE_EVENTS.wishlist);
-    wishlistApi.toggleWishlist(userId, movieId).catch(err => console.warn('API toggleWishlist failed:', err));
-    return wishlisted;
-  } catch {
-    return false;
+    return items;
+  } catch (err) {
+    console.warn(`Failed to sync wishlist for user ${userId}:`, err);
+    return getWishlist(userId);
+  }
+}
+
+export async function toggleWishlist(userId: string, movieId: string): Promise<boolean> {
+  if (!userId) {
+    throw new Error('Please sign in to save movies to your wishlist.');
+  }
+
+  // Optimistic update
+  const all = JSON.parse(localStorage.getItem(KEYS.wishlist) || '{}');
+  const list: string[] = all[userId] ? [...all[userId]] : [];
+  const idx = list.indexOf(movieId);
+  const previouslyWishlisted = idx >= 0;
+  const optimisticNext = !previouslyWishlisted;
+
+  if (optimisticNext) {
+    list.push(movieId);
+  } else {
+    list.splice(idx, 1);
+  }
+  all[userId] = list;
+  localStorage.setItem(KEYS.wishlist, JSON.stringify(all));
+  emitStoreEvent(STORE_EVENTS.wishlist);
+
+  try {
+    const res = await wishlistApi.toggleWishlist(userId, movieId);
+    const serverWishlisted = res.wishlisted;
+    if (serverWishlisted !== optimisticNext) {
+      const curAll = JSON.parse(localStorage.getItem(KEYS.wishlist) || '{}');
+      const curList: string[] = curAll[userId] ? [...curAll[userId]] : [];
+      const cIdx = curList.indexOf(movieId);
+      if (serverWishlisted && cIdx === -1) {
+        curList.push(movieId);
+      } else if (!serverWishlisted && cIdx >= 0) {
+        curList.splice(cIdx, 1);
+      }
+      curAll[userId] = curList;
+      localStorage.setItem(KEYS.wishlist, JSON.stringify(curAll));
+      emitStoreEvent(STORE_EVENTS.wishlist);
+    }
+    return serverWishlisted;
+  } catch (err: any) {
+    // Revert optimistic state on backend error (e.g. 401 unregistered user)
+    const revertAll = JSON.parse(localStorage.getItem(KEYS.wishlist) || '{}');
+    const revertList: string[] = revertAll[userId] ? [...revertAll[userId]] : [];
+    const rIdx = revertList.indexOf(movieId);
+    if (previouslyWishlisted) {
+      if (rIdx === -1) revertList.push(movieId);
+    } else {
+      if (rIdx >= 0) revertList.splice(rIdx, 1);
+    }
+    revertAll[userId] = revertList;
+    localStorage.setItem(KEYS.wishlist, JSON.stringify(revertAll));
+    emitStoreEvent(STORE_EVENTS.wishlist);
+    throw err;
   }
 }
 

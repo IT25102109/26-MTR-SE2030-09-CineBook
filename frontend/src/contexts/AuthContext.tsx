@@ -8,6 +8,7 @@ import {
   verifyOtpInStore,
   registerUserInStore,
   loginUserInStore,
+  loginGoogleInStore,
   STORE_EVENTS,
 } from '@/data/store';
 
@@ -16,6 +17,7 @@ interface AuthContextType {
   login: (role: Role) => void;
   loginWithEmail: (email: string, password?: string) => Promise<User>;
   loginWithSocial: (provider: 'google' | 'microsoft', email: string, name?: string) => Promise<User>;
+  loginWithGoogle: (idToken: string) => Promise<User>;
   sendOtp: (target: string, type: 'email' | 'phone') => Promise<OtpResponse>;
   verifyOtp: (target: string, code: string) => Promise<boolean>;
   registerUser: (req: RegisterRequest) => Promise<User>;
@@ -63,6 +65,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return loggedIn;
   };
 
+  const loginWithGoogle = async (idToken: string): Promise<User> => {
+    const loggedIn = await loginGoogleInStore(idToken);
+    setUser(loggedIn);
+    return loggedIn;
+  };
+
   const sendOtp = async (target: string, type: 'email' | 'phone'): Promise<OtpResponse> => {
     return await sendOtpInStore({ target, type });
   };
@@ -94,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         loginWithEmail,
         loginWithSocial,
+        loginWithGoogle,
         sendOtp,
         verifyOtp,
         registerUser,

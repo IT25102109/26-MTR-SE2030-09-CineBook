@@ -31,6 +31,8 @@ function normalizeAuthUser(raw: any): User {
     loyaltyTier: raw.membershipTier ?? raw.loyaltyTier ?? 'Bronze',
     phone: raw.phoneNumber ?? raw.phone,
     authProvider: raw.authProvider ? raw.authProvider.toLowerCase() : 'email',
+    googleId: raw.googleId,
+    profilePicture: raw.profilePicture,
     isVerified: raw.isVerified ?? true,
   };
 }
@@ -93,6 +95,21 @@ export const authApi = {
     const res = await apiClient<any>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload),
+    });
+    if (res.token) {
+      localStorage.setItem('cinebook_auth_token', res.token);
+    }
+    return {
+      token: res.token,
+      message: res.message,
+      user: normalizeAuthUser(res.user),
+    };
+  },
+
+  async loginWithGoogle(idToken: string): Promise<AuthResponse> {
+    const res = await apiClient<any>('/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ idToken, credential: idToken }),
     });
     if (res.token) {
       localStorage.setItem('cinebook_auth_token', res.token);

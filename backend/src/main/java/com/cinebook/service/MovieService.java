@@ -27,7 +27,7 @@ public class MovieService {
     }
 
     public Movie getMovieById(Long id) {
-        return movieRepository.findFirstById(id)
+        return movieRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Movie not found with id: " + id));
     }
 
@@ -65,55 +65,62 @@ public class MovieService {
             throw new IllegalArgumentException("A movie with title '" + title + "' already exists!");
         }
 
-        String synopsis = updatedMovie.getSynopsis() != null ? updatedMovie.getSynopsis() : existing.getSynopsis();
-        String castCsv = (updatedMovie.getCast() != null && !updatedMovie.getCast().isEmpty())
-                ? String.join(",", updatedMovie.getCast())
-                : existing.getCastCsv();
-        String director = updatedMovie.getDirector() != null ? updatedMovie.getDirector() : existing.getDirector();
-        String genresCsv = (updatedMovie.getGenres() != null && !updatedMovie.getGenres().isEmpty())
-                ? String.join(",", updatedMovie.getGenres())
-                : existing.getGenresCsv();
-        String language = updatedMovie.getLanguage() != null ? updatedMovie.getLanguage() : existing.getLanguage();
-        double rating = updatedMovie.getRating() > 0 ? updatedMovie.getRating() : existing.getRating();
+        existing.setTitle(title);
+        if (updatedMovie.getSynopsis() != null) {
+            existing.setSynopsis(updatedMovie.getSynopsis());
+        }
+        if (updatedMovie.getCast() != null && !updatedMovie.getCast().isEmpty()) {
+            existing.setCast(updatedMovie.getCast());
+        }
+        if (updatedMovie.getDirector() != null) {
+            existing.setDirector(updatedMovie.getDirector());
+        }
+        if (updatedMovie.getGenres() != null && !updatedMovie.getGenres().isEmpty()) {
+            existing.setGenres(updatedMovie.getGenres());
+        }
+        if (updatedMovie.getLanguage() != null) {
+            existing.setLanguage(updatedMovie.getLanguage());
+        }
+        if (updatedMovie.getRating() > 0) {
+            existing.setRating(updatedMovie.getRating());
+        }
         int duration = updatedMovie.getDurationMin() > 0
                 ? updatedMovie.getDurationMin()
                 : (updatedMovie.getDuration() > 0 ? updatedMovie.getDuration() : existing.getDurationMin());
-        String certification = updatedMovie.getCertification() != null ? updatedMovie.getCertification() : existing.getCertification();
-        String releaseDate = updatedMovie.getReleaseDate() != null ? updatedMovie.getReleaseDate() : existing.getReleaseDate();
+        if (duration > 0) {
+            existing.setDurationMin(duration);
+        }
+        if (updatedMovie.getCertification() != null) {
+            existing.setCertification(updatedMovie.getCertification());
+        }
+        if (updatedMovie.getReleaseDate() != null) {
+            existing.setReleaseDate(updatedMovie.getReleaseDate());
+        }
         String poster = updatedMovie.getPosterUrl() != null
                 ? updatedMovie.getPosterUrl()
                 : (updatedMovie.getPoster() != null ? updatedMovie.getPoster() : existing.getPosterUrl());
+        if (poster != null) {
+            existing.setPosterUrl(poster);
+        }
         String backdrop = updatedMovie.getBackdropUrl() != null
                 ? updatedMovie.getBackdropUrl()
                 : (updatedMovie.getBackdrop() != null ? updatedMovie.getBackdrop() : existing.getBackdropUrl());
-        String trailerUrl = updatedMovie.getTrailerUrl() != null ? updatedMovie.getTrailerUrl() : existing.getTrailerUrl();
-        String status = updatedMovie.getStatus() != null ? updatedMovie.getStatus() : existing.getStatus();
-        boolean featured = updatedMovie.isFeatured();
+        if (backdrop != null) {
+            existing.setBackdropUrl(backdrop);
+        }
+        if (updatedMovie.getTrailerUrl() != null) {
+            existing.setTrailerUrl(updatedMovie.getTrailerUrl());
+        }
+        if (updatedMovie.getStatus() != null) {
+            existing.setStatus(updatedMovie.getStatus());
+        }
+        existing.setFeatured(updatedMovie.isFeatured());
 
-        movieRepository.updateMovieComposite(
-                id,
-                title,
-                synopsis,
-                castCsv,
-                director,
-                genresCsv,
-                language,
-                rating,
-                duration,
-                certification,
-                releaseDate,
-                poster,
-                backdrop,
-                trailerUrl,
-                status,
-                featured
-        );
-
-        return getMovieById(id);
+        return movieRepository.save(existing);
     }
 
     @Transactional
     public void deleteMovie(Long id) {
-        movieRepository.deleteByMovieId(id);
+        movieRepository.deleteById(id);
     }
 }

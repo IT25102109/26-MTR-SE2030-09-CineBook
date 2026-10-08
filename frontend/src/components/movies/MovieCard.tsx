@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Star, Clock, Bookmark, Sparkles } from 'lucide-react';
 import type { Movie } from '@/types';
 import { Badge } from '@/components/ui/Badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
-import { isMovieWishlisted, toggleWishlist } from '@/data/store';
+import { isMovieWishlisted, toggleWishlist, STORE_EVENTS } from '@/data/store';
 
 interface MovieCardProps {
   movie: Movie;
@@ -19,22 +19,43 @@ export function MovieCard({ movie, index = 0, matchScore, matchReason, onWishlis
   const { user } = useAuth();
   const { toast } = useToast();
   const [wishlisted, setWishlisted] = useState(() => (user ? isMovieWishlisted(user.id, movie.id) : false));
+  const [isUpdating, setIsUpdating] = useState(false);
 
-  const handleToggleWishlist = (e: React.MouseEvent) => {
+  useEffect(() => {
+    setWishlisted(user ? isMovieWishlisted(user.id, movie.id) : false);
+  }, [user, movie.id]);
+
+  useEffect(() => {
+    const handleStoreChange = () => {
+      setWishlisted(user ? isMovieWishlisted(user.id, movie.id) : false);
+    };
+    window.addEventListener(STORE_EVENTS.wishlist, handleStoreChange);
+    return () => window.removeEventListener(STORE_EVENTS.wishlist, handleStoreChange);
+  }, [user, movie.id]);
+
+  const handleToggleWishlist = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!user) {
       toast('info', 'Please sign in to save movies to your wishlist');
       return;
     }
-    const newState = toggleWishlist(user.id, movie.id);
-    setWishlisted(newState);
-    if (newState) {
-      toast('success', `Added "${movie.title}" to your wishlist! You'll be alerted when showtimes open.`);
-    } else {
-      toast('info', `Removed "${movie.title}" from your wishlist`);
+    if (isUpdating) return;
+    setIsUpdating(true);
+    try {
+      const newState = await toggleWishlist(user.id, movie.id);
+      setWishlisted(newState);
+      if (newState) {
+        toast('success', `Added "${movie.title}" to your wishlist! You'll be alerted when showtimes open.`);
+      } else {
+        toast('info', `Removed "${movie.title}" from your wishlist`);
+      }
+      if (onWishlistChange) onWishlistChange();
+    } catch (err: any) {
+      toast('error', err.message || 'Failed to update wishlist. Only registered users can save wishlists.');
+    } finally {
+      setIsUpdating(false);
     }
-    if (onWishlistChange) onWishlistChange();
   };
 
   return (

@@ -119,8 +119,7 @@ CREATE TABLE `movies` (
   `status` varchar(255) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'now_showing',
   `featured` bit(1) NOT NULL DEFAULT b'0',
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`, `title`),
-  KEY `idx_movies_id` (`id`),
+  PRIMARY KEY (`id`),
   KEY `idx_movies_title` (`title`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -145,10 +144,12 @@ CREATE TABLE `users` (
   `first_name` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,
   `last_name` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,
   `email` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
-  `password` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
+  `password` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `google_id` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `profile_picture` varchar(1000) COLLATE utf8mb4_general_ci DEFAULT NULL,
   `phone` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,
   `role` enum('ADMIN','CINEMA_MANAGER','CUSTOMER') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'CUSTOMER',
-  `auth_provider` varchar(50) COLLATE utf8mb4_general_ci DEFAULT 'EMAIL',
+  `auth_provider` varchar(50) COLLATE utf8mb4_general_ci DEFAULT 'LOCAL',
   `date_registered` datetime DEFAULT CURRENT_TIMESTAMP,
   `branch_id` bigint DEFAULT NULL,
   `loyalty_points` int DEFAULT 0,
@@ -158,6 +159,7 @@ CREATE TABLE `users` (
   `avatar_color` varchar(20) COLLATE utf8mb4_general_ci DEFAULT '#F5C518',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_users_email` (`email`),
+  UNIQUE KEY `uk_users_google_id` (`google_id`),
   KEY `idx_users_branch` (`branch_id`),
   CONSTRAINT `fk_users_branch` FOREIGN KEY (`branch_id`) REFERENCES `cinemas` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -470,14 +472,14 @@ INSERT INTO `movie_genres` (`movie_id`, `genre_id`) VALUES
 -- Seed: `users`
 -- --------------------------------------------------------
 INSERT INTO `users` (`id`, `full_name`, `first_name`, `last_name`, `email`, `password`, `phone`, `role`, `auth_provider`, `branch_id`, `loyalty_points`, `membership_tier`, `employee_id`, `access_level`, `avatar_color`) VALUES
-(1, 'Alex Carter', 'Alex', 'Carter', 'alex@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-212-555-0199', 'CUSTOMER', 'EMAIL', NULL, 480, 'Silver', NULL, NULL, '#F5C518'),
-(2, 'Jordan Lee', 'Jordan', 'Lee', 'jordan@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-212-555-0198', 'CINEMA_MANAGER', 'EMAIL', 1, 0, 'Bronze', 'EMP-001', NULL, '#E50914'),
-(3, 'Sam Rivera', 'Sam', 'Rivera', 'sam@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-212-555-0197', 'ADMIN', 'EMAIL', NULL, 0, 'Bronze', NULL, 'SUPER_ADMIN', '#3B82F6'),
-(4, 'Taylor Swift', 'Taylor', 'Swift', 'taylor@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-310-555-0196', 'CUSTOMER', 'EMAIL', NULL, 1450, 'Platinum', NULL, NULL, '#10B981'),
-(5, 'Morgan Freeman', 'Morgan', 'Freeman', 'morgan@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-312-555-0195', 'CUSTOMER', 'EMAIL', NULL, 860, 'Gold', NULL, NULL, '#F97316'),
-(6, 'Casey Nguyen', 'Casey', 'Nguyen', 'casey@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-310-555-0194', 'CINEMA_MANAGER', 'EMAIL', 2, 0, 'Bronze', 'EMP-002', NULL, '#8B5CF6'),
-(7, 'Riley Patel', 'Riley', 'Patel', 'riley@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-312-555-0193', 'CUSTOMER', 'EMAIL', NULL, 120, 'Bronze', NULL, NULL, '#EC4899'),
-(8, 'Jamie Chen', 'Jamie', 'Chen', 'jamie@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-212-555-0192', 'CINEMA_MANAGER', 'EMAIL', 3, 0, 'Bronze', 'EMP-003', NULL, '#06B6D4');
+(1, 'Alex Carter', 'Alex', 'Carter', 'alex@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-212-555-0199', 'CUSTOMER', 'LOCAL', NULL, 480, 'Silver', NULL, NULL, '#F5C518'),
+(2, 'Jordan Lee', 'Jordan', 'Lee', 'jordan@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-212-555-0198', 'CINEMA_MANAGER', 'LOCAL', 1, 0, 'Bronze', 'EMP-001', NULL, '#E50914'),
+(3, 'Sam Rivera', 'Sam', 'Rivera', 'sam@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-212-555-0197', 'ADMIN', 'LOCAL', NULL, 0, 'Bronze', NULL, 'SUPER_ADMIN', '#3B82F6'),
+(4, 'Taylor Swift', 'Taylor', 'Swift', 'taylor@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-310-555-0196', 'CUSTOMER', 'LOCAL', NULL, 1450, 'Platinum', NULL, NULL, '#10B981'),
+(5, 'Morgan Freeman', 'Morgan', 'Freeman', 'morgan@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-312-555-0195', 'CUSTOMER', 'LOCAL', NULL, 860, 'Gold', NULL, NULL, '#F97316'),
+(6, 'Casey Nguyen', 'Casey', 'Nguyen', 'casey@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-310-555-0194', 'CINEMA_MANAGER', 'LOCAL', 2, 0, 'Bronze', 'EMP-002', NULL, '#8B5CF6'),
+(7, 'Riley Patel', 'Riley', 'Patel', 'riley@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-312-555-0193', 'CUSTOMER', 'LOCAL', NULL, 120, 'Bronze', NULL, NULL, '#EC4899'),
+(8, 'Jamie Chen', 'Jamie', 'Chen', 'jamie@cinebook.com', '$2a$10$7R5h.rQz6WpD7uFwB0HhCOoK2sNq2t9HnS9L1R9z9GzYqM8T1H9jW', '+1-212-555-0192', 'CINEMA_MANAGER', 'LOCAL', 3, 0, 'Bronze', 'EMP-003', NULL, '#06B6D4');
 
 -- --------------------------------------------------------
 -- Seed: `showtimes`
@@ -566,14 +568,14 @@ INSERT INTO `loyalty_vouchers` (`id`, `user_id`, `code`, `title`, `points_cost`,
 -- Seed: `notifications`
 -- --------------------------------------------------------
 INSERT INTO `notifications` (`id`, `user_id`, `type`, `title`, `message`, `link`, `audience`, `audience_target`, `created_by`, `status`, `is_read`, `created_at`) VALUES
-(1, 1, 'booking_confirmation', 'Booking Confirmed', 'Your booking for Father at CineBook Lakeside has been confirmed. Seat: D1.', '/ticket/CB-491988', 'all', NULL, 3, 'sent', b'0', '2026-09-16 13:28:15'),
-(2, 1, 'booking_confirmation', 'Booking Confirmed', 'Your booking for Dune: Part Two at CineBook Downtown has been confirmed. 2 seats: F5, F6.', '/ticket/CB-849201', 'all', NULL, 3, 'sent', b'0', '2026-09-16 14:10:00'),
-(3, 1, 'cancellation_refund', 'Refund Processed', 'Your refund of $44.97 for Oppenheimer has been processed to your original payment method.', NULL, 'all', NULL, 2, 'sent', b'1', '2026-09-15 11:20:00'),
-(4, 1, 'system_announcement', 'Welcome to CineBook', 'Thank you for joining CineBook! Enjoy premium cinema booking with IMAX, Dolby Atmos, and VIP recliner halls.', NULL, 'all', NULL, 3, 'sent', b'1', '2026-09-10 08:00:00'),
+(1, 1, 'booking_confirmation', 'Booking Confirmed', 'Your booking for Father at CineBook Lakeside has been confirmed. Seat: D1.', '/ticket/CB-491988', 'user', NULL, 3, 'sent', b'0', '2026-09-16 13:28:15'),
+(2, 1, 'booking_confirmation', 'Booking Confirmed', 'Your booking for Dune: Part Two at CineBook Downtown has been confirmed. 2 seats: F5, F6.', '/ticket/CB-849201', 'user', NULL, 3, 'sent', b'0', '2026-09-16 14:10:00'),
+(3, 1, 'cancellation_refund', 'Refund Processed', 'Your refund of $44.97 for Oppenheimer has been processed to your original payment method.', NULL, 'user', NULL, 2, 'sent', b'1', '2026-09-15 11:20:00'),
+(4, 1, 'system_announcement', 'Welcome to CineBook', 'Thank you for joining CineBook! Enjoy premium cinema booking with IMAX, Dolby Atmos, and VIP recliner halls.', NULL, 'user', NULL, 3, 'sent', b'1', '2026-09-10 08:00:00'),
 (5, 2, 'new_booking', 'New Booking Alert', 'New booking for Dune: Part Two at CineBook Downtown, Hall A — IMAX. 2 seats booked.', NULL, 'branch', '1', 3, 'sent', b'0', '2026-09-16 14:11:00'),
 (6, 2, 'low_availability', 'Low Seat Availability', 'Hall A — IMAX, 7:00 PM show is 90% booked. Only 6 seats remaining.', NULL, 'branch', '1', 3, 'sent', b'0', '2026-09-16 15:00:00'),
 (7, 3, 'revenue_milestone', 'Revenue Milestone Reached', 'CineBook Downtown has crossed $50,000 in monthly revenue. Great work!', NULL, 'role', 'ADMIN', 3, 'sent', b'0', '2026-09-16 12:00:00'),
-(8, 1, 'price_alert', 'Price Drop Alert', 'Tickets for Poor Things at CineBook Lakeside are now $9.99. Limited time offer!', '/movies/5', 'all', NULL, 3, 'sent', b'0', '2026-09-16 09:00:00');
+(8, NULL, 'price_alert', 'Price Drop Alert', 'Tickets for Poor Things at CineBook Lakeside are now $9.99. Limited time offer!', '/movies/5', 'all', NULL, 3, 'sent', b'0', '2026-09-16 09:00:00');
 
 -- --------------------------------------------------------
 -- Seed: `notification_templates`

@@ -11,7 +11,7 @@ function normalizeNotification(raw: any): Notification {
     read: Boolean(raw.read || raw.isRead),
     createdAt: raw.createdAt || new Date().toISOString(),
     link: raw.link || undefined,
-    audience: raw.audience || 'all',
+    audience: raw.audience || (raw.userId ? 'user' : 'all'),
     audienceTarget: raw.audienceTarget || undefined,
     createdBy: raw.createdBy != null ? String(raw.createdBy) : undefined,
     status: raw.status || (raw.read ? 'read' : 'sent'),
@@ -33,12 +33,12 @@ export const notificationApi = {
     const data = await apiClient<any>('/notifications', {
       method: 'POST',
       body: JSON.stringify({
-        userId: notification.userId,
+        userId: notification.userId || null,
         type: notification.type,
         title: notification.title,
         message: notification.message,
         link: notification.link,
-        audience: notification.audience || 'all',
+        audience: notification.audience || (notification.userId ? 'user' : 'all'),
         audienceTarget: notification.audienceTarget,
         createdBy: notification.createdBy,
         status: notification.status || 'sent',
@@ -46,6 +46,28 @@ export const notificationApi = {
       }),
     });
     return normalizeNotification(data);
+  },
+
+  async broadcastNotification(
+    notification: Omit<Notification, 'id' | 'userId' | 'read' | 'createdAt' | 'status'>,
+    targetUserIds?: string[]
+  ): Promise<Notification[]> {
+    const data = await apiClient<any[]>('/notifications/broadcast', {
+      method: 'POST',
+      body: JSON.stringify({
+        notification: {
+          type: notification.type,
+          title: notification.title,
+          message: notification.message,
+          link: notification.link,
+          audience: notification.audience || 'all',
+          audienceTarget: notification.audienceTarget,
+          createdBy: notification.createdBy,
+        },
+        targetUserIds,
+      }),
+    });
+    return (data || []).map(normalizeNotification);
   },
 
   async markAsRead(id: string): Promise<Notification> {
@@ -68,4 +90,3 @@ export const notificationApi = {
     });
   },
 };
-

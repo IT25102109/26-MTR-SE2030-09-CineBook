@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Star, Clock, Calendar, Film, Play, ChevronLeft, MapPin, X, MessageSquare, ThumbsUp, Send, User, CheckCircle, XCircle, ShieldCheck, Trash2 } from 'lucide-react';
-import { getMovie, getShowtimesByMovie, getBranches, getBranch, getMovieReviews, getMovieAllReviews, saveReview, updateReviewStatus, deleteReview, STORE_EVENTS } from '@/data/store';
+import { Star, Clock, Calendar, Film, Play, ChevronLeft, MapPin, X, MessageSquare, ThumbsUp, Send, User, CheckCircle, XCircle, ShieldCheck, Trash2, Bookmark } from 'lucide-react';
+import { getMovie, getShowtimesByMovie, getBranches, getBranch, getMovieReviews, getMovieAllReviews, saveReview, updateReviewStatus, deleteReview, isMovieWishlisted, toggleWishlist, STORE_EVENTS } from '@/data/store';
 import { useStoreSync } from '@/hooks/useStoreSync';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -25,11 +25,38 @@ export function MovieDetailsPage() {
     STORE_EVENTS.showtimes,
     STORE_EVENTS.branches,
     STORE_EVENTS.reviews,
+    STORE_EVENTS.wishlist,
   ]);
 
   const movie = useMemo(() => id ? getMovie(id) : undefined, [id, storeTick]);
   const showtimes = useMemo(() => id ? getShowtimesByMovie(id) : [], [id, storeTick]);
   const branches = useMemo(() => getBranches(), [storeTick]);
+
+  const wishlisted = useMemo(() => {
+    return user && movie ? isMovieWishlisted(user.id, movie.id) : false;
+  }, [user, movie, storeTick]);
+  const [isUpdatingWishlist, setIsUpdatingWishlist] = useState(false);
+
+  const handleToggleWishlist = async () => {
+    if (!user) {
+      toast('info', 'Please sign in to save movies to your wishlist');
+      return;
+    }
+    if (!movie || isUpdatingWishlist) return;
+    setIsUpdatingWishlist(true);
+    try {
+      const newState = await toggleWishlist(user.id, movie.id);
+      if (newState) {
+        toast('success', `Added "${movie.title}" to your wishlist! You'll be alerted when showtimes open.`);
+      } else {
+        toast('info', `Removed "${movie.title}" from your wishlist`);
+      }
+    } catch (err: any) {
+      toast('error', err.message || 'Failed to update wishlist. Only registered users can save wishlists.');
+    } finally {
+      setIsUpdatingWishlist(false);
+    }
+  };
 
   const [selectedBranch, setSelectedBranch] = useState<string>(branches[0]?.id || '');
   const [selectedDate, setSelectedDate] = useState<string>('');
@@ -207,7 +234,7 @@ export function MovieDetailsPage() {
               </div>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <Button size="lg" onClick={() => setIsTrailerOpen(true)}>
                 <Play className="w-4 h-4 fill-current" /> Watch Trailer
               </Button>
@@ -216,6 +243,16 @@ export function MovieDetailsPage() {
                   Book Now
                 </Button>
               )}
+              <Button
+                size="lg"
+                variant={wishlisted ? 'secondary' : 'outline'}
+                onClick={handleToggleWishlist}
+                disabled={isUpdatingWishlist}
+                className={wishlisted ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 hover:bg-amber-500/30' : ''}
+              >
+                <Bookmark className={`w-4 h-4 ${wishlisted ? 'fill-amber-400 text-amber-400' : ''}`} />
+                {wishlisted ? 'In Wishlist' : 'Add to Wishlist'}
+              </Button>
             </div>
           </div>
         </div>

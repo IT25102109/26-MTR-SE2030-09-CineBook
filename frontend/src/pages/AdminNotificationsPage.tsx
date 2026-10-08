@@ -124,7 +124,7 @@ export function AdminNotificationsPage() {
     setComposeOpen(true);
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!compose.title.trim() || !compose.message.trim()) {
       toast('error', 'Title and message are required');
       return;
@@ -153,30 +153,34 @@ export function AdminNotificationsPage() {
       return;
     }
 
-    broadcastNotification(
-      {
-        type: compose.type,
-        title: compose.title,
-        message: compose.message,
-        link: compose.link || undefined,
-        audience: compose.audience,
-        audienceTarget:
-          compose.audience === 'role'
-            ? compose.targetRole
-            : compose.audience === 'branch'
-            ? compose.targetBranch
-            : compose.audience === 'loyaltyTier'
-            ? compose.targetTier
-            : undefined,
-        createdBy: user.id,
-      },
-      targetUserIds
-    );
+    try {
+      await broadcastNotification(
+        {
+          type: compose.type,
+          title: compose.title,
+          message: compose.message,
+          link: compose.link || undefined,
+          audience: compose.audience,
+          audienceTarget:
+            compose.audience === 'role'
+              ? compose.targetRole
+              : compose.audience === 'branch'
+              ? compose.targetBranch
+              : compose.audience === 'loyaltyTier'
+              ? compose.targetTier
+              : undefined,
+          createdBy: user.id,
+        },
+        targetUserIds
+      );
 
-    setComposeOpen(false);
-    setTick(t => t + 1);
-    refresh();
-    toast('success', `Broadcast sent to ${targetUserIds.length} user${targetUserIds.length > 1 ? 's' : ''}`);
+      setComposeOpen(false);
+      setTick(t => t + 1);
+      refresh();
+      toast('success', `Broadcast sent to ${targetUserIds.length} user${targetUserIds.length > 1 ? 's' : ''}`);
+    } catch (err: any) {
+      toast('error', err.message || 'Failed to dispatch broadcast');
+    }
   };
 
   const openCreateTemplate = () => {
